@@ -29,6 +29,11 @@ import com.ustad.personalassistant.security.SecurityManagerImpl
 import com.ustad.personalassistant.services.ActionExecutor
 import com.ustad.personalassistant.services.AdvancedAccessibilityService
 import com.ustad.personalassistant.services.GuardedActionExecutor
+import com.ustad.personalassistant.voice.AndroidVoiceEngine
+import com.ustad.personalassistant.voice.SpeechToTextManager
+import com.ustad.personalassistant.voice.TextToSpeechManager
+import com.ustad.personalassistant.voice.VoiceEngine
+import com.ustad.personalassistant.voice.VoiceProviderRegistry
 
 class UstadApplication : Application() {
     lateinit var permissionManager: AndroidPermissionManager; private set
@@ -46,6 +51,10 @@ class UstadApplication : Application() {
     lateinit var automationPipeline: AutomationPipeline; private set
     lateinit var confirmationPolicy: ConfirmationPolicy; private set
     lateinit var aiAutomationOrchestrator: AiAutomationOrchestrator; private set
+    lateinit var voiceProviderRegistry: VoiceProviderRegistry; private set
+    lateinit var sttManager: SpeechToTextManager; private set
+    lateinit var ttsManager: TextToSpeechManager; private set
+    lateinit var voiceEngine: VoiceEngine; private set
 
     override fun onCreate() {
         super.onCreate()
@@ -67,5 +76,10 @@ class UstadApplication : Application() {
         automationPipeline = AutomationPipeline(capabilityEngine, securityManager, automationPolicy, { action, target -> actionExecutor.execute(action, target) })
         confirmationPolicy = DefaultConfirmationPolicy()
         aiAutomationOrchestrator = AiAutomationOrchestrator(aiBrain, automationPipeline, confirmationPolicy)
+
+        voiceProviderRegistry = VoiceProviderRegistry(this) { networkMonitor.state().name == "ONLINE" }
+        sttManager = SpeechToTextManager({ voiceProviderRegistry.sttProviders(this) }, { networkMonitor.state().name == "ONLINE" })
+        ttsManager = TextToSpeechManager({ voiceProviderRegistry.ttsProviders(this) }, { networkMonitor.state().name == "ONLINE" })
+        voiceEngine = AndroidVoiceEngine(permissionManager, capabilityEngine, sttManager, ttsManager, aiAutomationOrchestrator, settingsRepository)
     }
 }
