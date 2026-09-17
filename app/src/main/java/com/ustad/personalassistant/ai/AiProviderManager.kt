@@ -12,7 +12,6 @@ class AiProviderManager(context: Context) {
     private val credentialStore = AiCredentialStore(secrets)
 
     init { load() }
-
     fun allConfigs(): List<ProviderConfig> = configs.values.sortedBy { it.priority }
     fun get(providerId: String): ProviderConfig? = configs[providerId]
     fun routingPolicy(): RoutingPolicy = runCatching { RoutingPolicy.valueOf(prefs.getString("routing_policy", RoutingPolicy.PRIVACY_FIRST.name)!!) }.getOrDefault(RoutingPolicy.PRIVACY_FIRST)
@@ -21,12 +20,10 @@ class AiProviderManager(context: Context) {
     fun save(config: ProviderConfig, apiKey: String? = null) {
         require(config.providerId.matches(Regex("[a-z0-9._-]{2,40}")))
         configs[config.providerId] = config.copy(priority = config.priority.coerceIn(1, 999), retryCount = config.retryCount.coerceIn(0, 3), timeoutMs = config.timeoutMs.coerceIn(1_000L, 120_000L))
-        if (apiKey != null) {
-            if (apiKey.isBlank()) credentialStore.removeApiKey(config.providerId) else credentialStore.saveApiKey(config.providerId, apiKey.trim())
-        }
+        if (apiKey != null) credentialStore.saveApiKey(config.providerId, apiKey.trim())
         persist()
     }
-
+    fun removeApiKey(providerId: String) { credentialStore.removeApiKey(providerId) }
     fun remove(providerId: String) { configs.remove(providerId); credentialStore.removeApiKey(providerId); persist() }
     fun maskedKey(providerId: String): String = credentialStore.masked(providerId)
     fun hasKey(providerId: String): Boolean = credentialStore.hasApiKey(providerId)
@@ -35,11 +32,7 @@ class AiProviderManager(context: Context) {
 
     private fun load() {
         val raw = prefs.getString("configs", null)
-        if (raw.isNullOrBlank()) {
-            DefaultProviderSlots.configs().forEach { configs[it.providerId] = it }
-            persist()
-            return
-        }
+        if (raw.isNullOrBlank()) { DefaultProviderSlots.configs().forEach { configs[it.providerId] = it }; persist(); return }
         runCatching {
             val array = JSONArray(raw)
             for (i in 0 until array.length()) {
@@ -50,12 +43,9 @@ class AiProviderManager(context: Context) {
             }
         }.onFailure { DefaultProviderSlots.configs().forEach { configs[it.providerId] = it }; persist() }
     }
-
     private fun persist() {
         val array = JSONArray()
-        configs.values.forEach { c -> array.put(JSONObject().apply {
-            put("providerId", c.providerId); put("displayName", c.displayName); put("enabled", c.enabled); put("priority", c.priority); put("model", c.model); put("endpoint", c.endpoint ?: ""); put("timeoutMs", c.timeoutMs); put("retryCount", c.retryCount); put("capabilities", JSONArray(c.capabilities.map { it.name }))
-        }) }
+        configs.values.forEach { c -> array.put(JSONObject().apply { put("providerId", c.providerId); put("displayName", c.displayName); put("enabled", c.enabled); put("priority", c.priority); put("model", c.model); put("endpoint", c.endpoint ?: ""); put("timeoutMs", c.timeoutMs); put("retryCount", c.retryCount); put("capabilities", JSONArray(c.capabilities.map { it.name })) }) }
         prefs.edit().putString("configs", array.toString()).apply()
     }
 }
