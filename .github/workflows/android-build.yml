@@ -26,15 +26,20 @@ jobs:
       - name: Create temporary CI signing key
         shell: bash
         run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/ustad-ci-release.jks"
+          PASSWORD='ustad-ci-store'
           keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/ustad-ci-release.jks" \
-            -storepass ustad-ci-store \
-            -keypass ustad-ci-key \
+            -keystore "$KEYSTORE" \
+            -storetype JKS \
+            -storepass "$PASSWORD" \
+            -keypass "$PASSWORD" \
             -alias ustad-ci \
             -keyalg RSA \
             -keysize 2048 \
             -validity 7 \
             -dname "CN=USTAD CI, OU=Build, O=USTAD, L=CI, ST=CI, C=IN"
+          keytool -list -keystore "$KEYSTORE" -storetype JKS -storepass "$PASSWORD" -alias ustad-ci
       - name: Build debug APK
         run: gradle clean :app:assembleDebug --stacktrace
       - name: Build signed release APK
@@ -42,10 +47,17 @@ jobs:
           CI_KEYSTORE_FILE: ${{ runner.temp }}/ustad-ci-release.jks
           CI_KEYSTORE_PASSWORD: ustad-ci-store
           CI_KEY_ALIAS: ustad-ci
-          CI_KEY_PASSWORD: ustad-ci-key
+          CI_KEY_PASSWORD: ustad-ci-store
         run: gradle :app:assembleRelease --stacktrace
       - name: Run unit tests
         run: gradle :app:testDebugUnitTest --stacktrace
+      - name: Verify release APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -f "$APK"
+          apksigner verify --verbose "$APK"
       - name: Upload installable release APK
         uses: actions/upload-artifact@v4
         with:
