@@ -73,7 +73,7 @@ class SecurityFirewall(
             requiresConfirmation(request.action) && !request.confirmed -> SecurityDecision.CONFIRMATION_REQUIRED
             else -> SecurityDecision.ALLOW
         }
-        auditLogger.record(SecurityAuditEvent(System.currentTimeMillis(), sanitizeAction(request.action), decision, reasonFor(decision), request.targetApp, request.sessionType))
+        auditLogger.record(SecurityAuditEvent(System.currentTimeMillis(), actionCategory(request.action), decision, reasonFor(decision), request.targetApp, request.sessionType))
         return decision
     }
 
@@ -81,7 +81,25 @@ class SecurityFirewall(
 
     fun auditSnapshot(): List<SecurityAuditEvent> = auditLogger.snapshot()
 
-    private fun sanitizeAction(action: String): String = action.substringBefore(":").substringBefore("|").trim().take(60).ifBlank { "unknown_action" }
+    /** Audit logs contain only a stable category, never command text or message content. */
+    private fun actionCategory(action: String): String {
+        val normalized = action.trim().lowercase()
+        return when {
+            normalized.isBlank() -> "unknown_action"
+            normalized.contains("send") -> "send"
+            normalized.contains("reply") -> "reply"
+            normalized.contains("delete") || normalized.contains("remove") -> "delete"
+            normalized.contains("post") || normalized.contains("publish") -> "publish"
+            normalized.contains("call") -> "call"
+            normalized.contains("open") || normalized.contains("launch") -> "open"
+            normalized.contains("read") || normalized.contains("search") -> "read"
+            normalized.contains("battery") -> "diagnostic_battery"
+            normalized.contains("storage") -> "diagnostic_storage"
+            normalized.contains("network") || normalized.contains("internet") -> "diagnostic_network"
+            normalized.contains("diagnostic") || normalized.contains("status") -> "diagnostic"
+            else -> "other"
+        }
+    }
 
     private fun requiresConfirmation(action: String): Boolean {
         val normalized = action.lowercase()
