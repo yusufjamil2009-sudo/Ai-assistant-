@@ -11,9 +11,9 @@ import javax.crypto.spec.GCMParameterSpec
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 
-class SecureConfigStore(context: Context) {
-    private val preferences = context.getSharedPreferences("secure_config", Context.MODE_PRIVATE)
-    private val keyAlias = "ustad_config_key"
+class SecureConfigStore(context: Context, private val namespace: String = "default") {
+    private val preferences = context.getSharedPreferences("secure_config_$namespace", Context.MODE_PRIVATE)
+    private val keyAlias = "ustad_config_key_$namespace"
 
     fun put(key: String, value: String) {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
