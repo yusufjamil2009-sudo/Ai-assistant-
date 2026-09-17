@@ -3,7 +3,6 @@ package com.ustad.personalassistant.voice
 import android.Manifest
 import android.app.Activity
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import androidx.core.content.ContextCompat
 import com.ustad.personalassistant.ai.AiAutomationOrchestrator
 import com.ustad.personalassistant.ai.AiRequest
@@ -46,13 +45,12 @@ class AndroidVoiceEngine(
     private val normalizer: VoiceInputNormalizer = DefaultVoiceInputNormalizer()
 ) : VoiceEngine {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var sessionState = VoiceSessionState.IDLE
-    private var speakingState = SpeakingState.IDLE
+    @Volatile private var sessionState = VoiceSessionState.IDLE
+    @Volatile private var speakingState = SpeakingState.IDLE
     private var activeSttProvider: String? = null
     private var callback: (SttEvent) -> Unit = {}
     private var mode = VoiceOperationMode.USER_COMMAND
     private var operationJob: Job? = null
-    private var latestFinalText: String? = null
 
     override fun startListening(activity: Activity, onEvent: (SttEvent) -> Unit) {
         if (sessionState == VoiceSessionState.LISTENING || sessionState == VoiceSessionState.STARTING || sessionState == VoiceSessionState.PROCESSING) return
@@ -61,7 +59,6 @@ class AndroidVoiceEngine(
         sessionState = VoiceSessionState.REQUESTING_PERMISSION
         val status = permissionManager.verifyPermission(Capability.MICROPHONE)
         if (status != CapabilityStatus.ON) {
-            sessionState = VoiceSessionState.REQUESTING_PERMISSION
             if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 permissionManager.requestPermission(activity, Capability.MICROPHONE)
             } else {
@@ -70,7 +67,7 @@ class AndroidVoiceEngine(
             }
             return
         }
-        if (!capabilityEngine.canUse(Capability.MICROPHONE)) {
+        if (!capabilityEngine.isAvailable(Capability.MICROPHONE)) {
             sessionState = VoiceSessionState.ERROR
             callback(SttEvent(SttEventType.ERROR, error = VoiceError(VoiceErrorCode.MIC_PERMISSION_REQUIRED, "Microphone permission is required.")))
             return
@@ -82,19 +79,12 @@ class AndroidVoiceEngine(
         sessionState = VoiceSessionState.STARTING
         operationJob?.cancel()
         operationJob = scope.launch {
-            val languageName = settings.voiceLanguage.first()
-            val language = runCatching { VoiceLanguage.valueOf(languageName) }.getOrDefault(VoiceLanguage.HINGLISH)
+            val language = runCatching { VoiceLanguage.valueOf(settings.voiceLanguage.first()) }.getOrDefault(VoiceLanguage.HINGLISH)
             val result = sttManager.start(language) { event ->
-                if (event.type == SttEventType.PARTIAL) {
-                    callback(event)
-                } else if (event.type == SttEventType.FINAL) {
-                    sessionState = VoiceSessionState.PROCESSING
-                    latestFinalText = event.result?.text
-                    callback(event)
-                    processFinal(event.result?.text, language)
-                } else {
-                    sessionState = VoiceSessionState.ERROR
-                    callback(event)
+                when (event.type) {
+                    SttEventType.PARTIAL -> callback(event)
+                    SttEventType.FINAL -> { sessionState = VoiceSessionState.PROCESSING; callback(event); processFinal(event.result?.text, event.result?.language ?: language) }
+                    SttEventType.ERROR -> { sessionState = VoiceSessionState.ERROR; callback(event) }
                 }
             }
             result.onSuccess { activeSttProvider = it; sessionState = VoiceSessionState.LISTENING }
@@ -104,22 +94,15 @@ class AndroidVoiceEngine(
 
     private fun processFinal(rawText: String?, detectedLanguage: VoiceLanguage) {
         if (rawText.isNullOrBlank()) { sessionState = VoiceSessionState.IDLE; return }
-        if (mode == VoiceOperationMode.CALL_CONVERSATION_MODE) {
-            sessionState = VoiceSessionState.IDLE
-            return
-        }
+        if (mode == VoiceOperationMode.CALL_CONVERSATION_MODE) { sessionState = VoiceSessionState.IDLE; return }
         val normalized = normalizer.normalize(rawText)
         if (normalized.isBlank()) { sessionState = VoiceSessionState.IDLE; return }
         operationJob?.cancel()
         operationJob = scope.launch(Dispatchers.Default) {
-            val request = AiRequest(normalized)
-            val result = aiOrchestrator.process(request)
+            val result = aiOrchestrator.process(AiRequest(normalized))
             withContext(Dispatchers.Main.immediate) {
-                result.onSuccess { response -> handleAiResponse(response, detectedLanguage) }
-                    .onFailure { error ->
-                        sessionState = VoiceSessionState.ERROR
-                        callback(SttEvent(SttEventType.ERROR, error = VoiceError(VoiceErrorCode.VOICE_SESSION_ERROR, "I couldn't process that voice request.", error.message)))
-                    }
+                result.onSuccess { handleAiResponse(it, detectedLanguage) }
+                    .onFailure { error -> sessionState = VoiceSessionState.ERROR; callback(SttEvent(SttEventType.ERROR, error = VoiceError(VoiceErrorCode.VOICE_SESSION_ERROR, "I couldn't process that voice request.", error.message))) }
             }
         }
     }
@@ -127,48 +110,28 @@ class AndroidVoiceEngine(
     private fun handleAiResponse(response: AiResponse, language: VoiceLanguage) {
         sessionState = VoiceSessionState.IDLE
         if (response.text.isBlank()) return
-        scope.launch {
-            if (settings.autoSpeak.first()) speak(response.text) else callback(SttEvent(SttEventType.FINAL, SttResult(response.text, language, null, "ai_response", true)))
-        }
+        scope.launch { if (settings.autoSpeak.first()) speak(response.text) else callback(SttEvent(SttEventType.FINAL, SttResult(response.text, language, null, "ai_response", true))) }
     }
 
     override fun stopListening() {
         if (sessionState == VoiceSessionState.IDLE) return
         sessionState = VoiceSessionState.STOPPING
-        activeSttProvider?.let { sttManager.stop(it) }
+        activeSttProvider?.let(sttManager::stop)
         activeSttProvider = null
-        operationJob?.cancel()
-        operationJob = null
+        operationJob?.cancel(); operationJob = null
         sessionState = VoiceSessionState.IDLE
     }
-
     override fun cancelListening() = stopListening()
-
     override fun speak(text: String, onComplete: (Result<Unit>) -> Unit) {
-        stopSpeaking()
-        sessionState = VoiceSessionState.SPEAKING
-        speakingState = SpeakingState.SPEAKING
+        stopSpeaking(); sessionState = VoiceSessionState.SPEAKING; speakingState = SpeakingState.SPEAKING
         scope.launch {
-            val languageName = settings.voiceLanguage.first()
-            val language = runCatching { VoiceLanguage.valueOf(languageName) }.getOrDefault(VoiceLanguage.HINGLISH)
-            ttsManager.speak(text, language) { result ->
-                speakingState = if (result.isSuccess) SpeakingState.IDLE else SpeakingState.ERROR
-                if (sessionState == VoiceSessionState.SPEAKING) sessionState = VoiceSessionState.IDLE
-                onComplete(result)
-            }
+            val language = runCatching { VoiceLanguage.valueOf(settings.voiceLanguage.first()) }.getOrDefault(VoiceLanguage.HINGLISH)
+            ttsManager.speak(text, language) { result -> speakingState = if (result.isSuccess) SpeakingState.IDLE else SpeakingState.ERROR; if (sessionState == VoiceSessionState.SPEAKING) sessionState = VoiceSessionState.IDLE; onComplete(result) }
         }
     }
-
-    override fun stopSpeaking() {
-        if (speakingState == SpeakingState.IDLE) return
-        speakingState = SpeakingState.STOPPING
-        ttsManager.stop()
-        speakingState = SpeakingState.IDLE
-        if (sessionState == VoiceSessionState.SPEAKING) sessionState = VoiceSessionState.IDLE
-    }
-
-    override fun getListeningState(): VoiceSessionState = sessionState
-    override fun getSpeakingState(): SpeakingState = speakingState
+    override fun stopSpeaking() { if (speakingState == SpeakingState.IDLE) return; speakingState = SpeakingState.STOPPING; ttsManager.stop(); speakingState = SpeakingState.IDLE; if (sessionState == VoiceSessionState.SPEAKING) sessionState = VoiceSessionState.IDLE }
+    override fun getListeningState() = sessionState
+    override fun getSpeakingState() = speakingState
     override fun setCallConversationMode(enabled: Boolean) { mode = if (enabled) VoiceOperationMode.CALL_CONVERSATION_MODE else VoiceOperationMode.USER_COMMAND; if (enabled) stopListening() }
     override fun close() { stopListening(); stopSpeaking(); scope.cancel() }
 }
