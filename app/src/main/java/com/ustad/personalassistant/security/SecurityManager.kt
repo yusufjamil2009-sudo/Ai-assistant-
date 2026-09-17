@@ -1,5 +1,6 @@
 package com.ustad.personalassistant.security
 
+import com.ustad.personalassistant.accessibility.DefaultAutomationPolicy
 import com.ustad.personalassistant.domain.UstadError
 
 interface SecurityManager {
@@ -13,7 +14,8 @@ interface ProtectedAppPolicy {
 }
 
 class DefaultProtectedAppPolicy : ProtectedAppPolicy {
-    override fun isProtected(packageName: String): Boolean = false
+    private val blockedMarkers = listOf("bank", "banking", "upi", "wallet", "payment", "finance", "finserv", "paytm", "phonepe", "gpay")
+    override fun isProtected(packageName: String): Boolean = blockedMarkers.any { packageName.lowercase().contains(it) }
 }
 
 class SecurityManagerImpl(
@@ -21,8 +23,5 @@ class SecurityManagerImpl(
 ) : SecurityManager {
     override fun isActionAuthorized(action: String): Boolean = action.isNotBlank()
     override fun isProtectedApp(packageName: String): Boolean = protectedAppPolicy.isProtected(packageName)
-    override fun audit(event: String) {
-        // Part 01 intentionally records no sensitive payloads and performs no actions.
-        require(event.length <= 200) { UstadError.ConfigurationError.toString() }
-    }
+    override fun audit(event: String) { require(event.length <= 200) { UstadError.ConfigurationError.toString() } }
 }
