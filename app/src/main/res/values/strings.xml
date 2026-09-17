@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">USTAD Personal AI Assistant</string>
+    <string name="accessibility_service_description">Foundation service for future USTAD app-control capabilities. No automation is performed in Part 01.</string>
+</resources>
