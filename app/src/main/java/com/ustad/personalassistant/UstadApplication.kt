@@ -14,6 +14,7 @@ import com.ustad.personalassistant.ai.UnavailableOnDeviceAiProvider
 import com.ustad.personalassistant.automation.AutomationPipeline
 import com.ustad.personalassistant.automation.ConfirmationPolicy
 import com.ustad.personalassistant.automation.DefaultConfirmationPolicy
+import com.ustad.personalassistant.background.BackgroundAssistantManager
 import com.ustad.personalassistant.capability.CapabilityEngine
 import com.ustad.personalassistant.capability.DefaultCapabilityEngine
 import com.ustad.personalassistant.data.AppStateRepositoryImpl
@@ -30,9 +31,13 @@ import com.ustad.personalassistant.services.ActionExecutor
 import com.ustad.personalassistant.services.AdvancedAccessibilityService
 import com.ustad.personalassistant.services.GuardedActionExecutor
 import com.ustad.personalassistant.voice.AndroidVoiceEngine
+import com.ustad.personalassistant.voice.AndroidVoiceSampleCapture
+import com.ustad.personalassistant.voice.LocalVoiceAuthenticationEngine
 import com.ustad.personalassistant.voice.SpeechToTextManager
 import com.ustad.personalassistant.voice.TextToSpeechManager
+import com.ustad.personalassistant.voice.VoiceAuthenticationEngine
 import com.ustad.personalassistant.voice.VoiceEngine
+import com.ustad.personalassistant.voice.VoiceSessionManager
 import com.ustad.personalassistant.voice.VoiceProviderRegistry
 
 class UstadApplication : Application() {
@@ -55,31 +60,16 @@ class UstadApplication : Application() {
     lateinit var sttManager: SpeechToTextManager; private set
     lateinit var ttsManager: TextToSpeechManager; private set
     lateinit var voiceEngine: VoiceEngine; private set
+    lateinit var voiceAuthenticationEngine: VoiceAuthenticationEngine; private set
+    lateinit var voiceSessionManager: VoiceSessionManager; private set
+    lateinit var backgroundAssistantManager: BackgroundAssistantManager; private set
 
     override fun onCreate() {
         super.onCreate()
-        permissionManager = AndroidPermissionManager(this)
-        capabilityEngine = DefaultCapabilityEngine(permissionManager)
-        appStateRepository = AppStateRepositoryImpl(permissionManager)
-        settingsRepository = SettingsRepositoryImpl(this)
-        securityManager = SecurityManagerImpl()
-        automationPolicy = DefaultAutomationPolicy()
-        accessibilityActionEngine = AndroidAccessibilityActionEngine({ AdvancedAccessibilityService.active }, securityManager)
-        val gmailState = SecureGmailAuthStateStore(SecureConfigStore(this, "gmail_auth_state"))
-        gmailService = DefaultGmailService(UnconfiguredGmailRepository(), UnconfiguredGmailAuthManager(gmailState))
-
-        aiProviderManager = AiProviderManager(this)
-        networkMonitor = AndroidNetworkMonitor(this)
-        val apiManager = aiProviderManager.buildApiManager { networkMonitor.state() }
-        aiBrain = CentralAiBrain(UnavailableOnDeviceAiProvider(), apiManager) { aiProviderManager.routingPolicy() }
-        actionExecutor = GuardedActionExecutor(securityManager, capabilityEngine)
-        automationPipeline = AutomationPipeline(capabilityEngine, securityManager, automationPolicy, { action, target -> actionExecutor.execute(action, target) })
-        confirmationPolicy = DefaultConfirmationPolicy()
-        aiAutomationOrchestrator = AiAutomationOrchestrator(aiBrain, automationPipeline, confirmationPolicy)
-
-        voiceProviderRegistry = VoiceProviderRegistry(this) { networkMonitor.state().name == "ONLINE" }
-        sttManager = SpeechToTextManager({ voiceProviderRegistry.sttProviders(this) }, { networkMonitor.state().name == "ONLINE" })
-        ttsManager = TextToSpeechManager({ voiceProviderRegistry.ttsProviders(this) }, { networkMonitor.state().name == "ONLINE" })
-        voiceEngine = AndroidVoiceEngine(permissionManager, capabilityEngine, sttManager, ttsManager, aiAutomationOrchestrator, settingsRepository)
+        permissionManager = AndroidPermissionManager(this); capabilityEngine = DefaultCapabilityEngine(permissionManager); appStateRepository = AppStateRepositoryImpl(permissionManager); settingsRepository = SettingsRepositoryImpl(this); securityManager = SecurityManagerImpl(); automationPolicy = DefaultAutomationPolicy(); accessibilityActionEngine = AndroidAccessibilityActionEngine({ AdvancedAccessibilityService.active }, securityManager)
+        val gmailState = SecureGmailAuthStateStore(SecureConfigStore(this, "gmail_auth_state")); gmailService = DefaultGmailService(UnconfiguredGmailRepository(), UnconfiguredGmailAuthManager(gmailState))
+        aiProviderManager = AiProviderManager(this); networkMonitor = AndroidNetworkMonitor(this); val apiManager = aiProviderManager.buildApiManager { networkMonitor.state() }; aiBrain = CentralAiBrain(UnavailableOnDeviceAiProvider(), apiManager) { aiProviderManager.routingPolicy() }; actionExecutor = GuardedActionExecutor(securityManager, capabilityEngine); automationPipeline = AutomationPipeline(capabilityEngine, securityManager, automationPolicy, { action, target -> actionExecutor.execute(action, target) }); confirmationPolicy = DefaultConfirmationPolicy(); aiAutomationOrchestrator = AiAutomationOrchestrator(aiBrain, automationPipeline, confirmationPolicy)
+        voiceProviderRegistry = VoiceProviderRegistry(this) { networkMonitor.state().name == "ONLINE" }; sttManager = SpeechToTextManager({ voiceProviderRegistry.sttProviders(this) }, { networkMonitor.state().name == "ONLINE" }); ttsManager = TextToSpeechManager({ voiceProviderRegistry.ttsProviders(this) }, { networkMonitor.state().name == "ONLINE" }); voiceEngine = AndroidVoiceEngine(permissionManager, capabilityEngine, sttManager, ttsManager, aiAutomationOrchestrator, settingsRepository)
+        voiceAuthenticationEngine = LocalVoiceAuthenticationEngine(this, AndroidVoiceSampleCapture(this)); voiceSessionManager = VoiceSessionManager(this, voiceEngine, voiceAuthenticationEngine, settingsRepository); backgroundAssistantManager = BackgroundAssistantManager(this)
     }
 }

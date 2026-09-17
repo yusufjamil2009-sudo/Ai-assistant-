@@ -1,8 +1,6 @@
 package com.ustad.personalassistant.domain
 
-enum class CapabilityStatus {
-    UNKNOWN, OFF, ON, CONNECT, CONNECTED, NOT_AVAILABLE, ACTION_REQUIRED, NOT_ENROLLED
-}
+enum class CapabilityStatus { UNKNOWN, OFF, ON, CONNECT, CONNECTED, NOT_AVAILABLE, ACTION_REQUIRED, NOT_ENROLLED }
 
 data class AppState(
     val assistantEnabled: Boolean = true,
@@ -21,8 +19,4 @@ data class AppState(
     val googleAccountConnection: CapabilityStatus = CapabilityStatus.CONNECT
 )
 
-data class CapabilityInfo(
-    val title: String,
-    val description: String,
-    val status: CapabilityStatus
-)
+data class CapabilityInfo(val title: String, val description: String, val status: CapabilityStatus)
