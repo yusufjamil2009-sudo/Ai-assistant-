@@ -41,17 +41,16 @@ fun AiProviderManagerScreen(manager: AiProviderManager) {
         HorizontalDivider()
         Text("Cloud Providers")
         configs.forEach { config ->
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(config.displayName)
-                    Text("Priority ${config.priority} • ${if (config.enabled) "Enabled" else "Disabled"} • ${manager.maskedKey(config.providerId)}")
-                    Text("Model: ${config.model.ifBlank { "Not configured" }}")
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { selected = config }) { Text("CONFIGURE") }
-                        TextButton(onClick = { manager.save(config.copy(enabled = !config.enabled)); version++ }) { Text(if (config.enabled) "DISABLE" else "ENABLE") }
-                    }
+            Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(config.displayName)
+                Text("Priority ${config.priority} • ${if (config.enabled) "Enabled" else "Disabled"} • ${manager.maskedKey(config.providerId)}")
+                Text("Model: ${config.model.ifBlank { "Not configured" }}")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { selected = config }) { Text("CONFIGURE") }
+                    TextButton(onClick = { manager.save(config.copy(enabled = !config.enabled)); version++ }) { Text(if (config.enabled) "DISABLE" else "ENABLE") }
+                    if (manager.hasKey(config.providerId)) TextButton(onClick = { manager.removeApiKey(config.providerId); version++ }) { Text("REMOVE KEY") }
                 }
-            }
+            } }
         }
         Text("On-Device AI")
         Text("State: NOT SUPPORTED until a compatible on-device runtime/model is supplied. Cloud routing remains available as configured.")
@@ -69,25 +68,19 @@ private fun ProviderEditorDialog(manager: AiProviderManager, initial: ProviderCo
     var priority by remember(initial.providerId) { mutableStateOf(initial.priority.toString()) }
     var timeout by remember(initial.providerId) { mutableStateOf(initial.timeoutMs.toString()) }
     var retries by remember(initial.providerId) { mutableStateOf(initial.retryCount.toString()) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Configure ${initial.displayName}") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(model, { model = it }, label = { Text("Model") }, singleLine = true)
-                OutlinedTextField(endpoint, { endpoint = it }, label = { Text("Endpoint") }, singleLine = true)
-                OutlinedTextField(key, { key = it }, label = { Text("API key (leave blank to keep existing)") }, singleLine = true)
-                OutlinedTextField(priority, { priority = it.filter(Char::isDigit) }, label = { Text("Priority") }, singleLine = true)
-                OutlinedTextField(timeout, { timeout = it.filter(Char::isDigit) }, label = { Text("Timeout ms") }, singleLine = true)
-                OutlinedTextField(retries, { retries = it.filter(Char::isDigit) }, label = { Text("Retries 0–3") }, singleLine = true)
-            }
-        },
-        confirmButton = {
-            Button(onClick = {
-                manager.save(initial.copy(model = model.trim(), endpoint = endpoint.trim().ifBlank { null }, priority = priority.toIntOrNull() ?: initial.priority, timeoutMs = timeout.toLongOrNull() ?: initial.timeoutMs, retryCount = retries.toIntOrNull() ?: initial.retryCount), key.takeIf { it.isNotBlank() })
-                onSaved()
-            }) { Text("SAVE") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } }
-    )
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Configure ${initial.displayName}") }, text = {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(model, { model = it }, label = { Text("Model") }, singleLine = true)
+            OutlinedTextField(endpoint, { endpoint = it }, label = { Text("Endpoint") }, singleLine = true)
+            OutlinedTextField(key, { key = it }, label = { Text("API key (leave blank to keep existing)") }, singleLine = true)
+            OutlinedTextField(priority, { priority = it.filter(Char::isDigit) }, label = { Text("Priority") }, singleLine = true)
+            OutlinedTextField(timeout, { timeout = it.filter(Char::isDigit) }, label = { Text("Timeout ms") }, singleLine = true)
+            OutlinedTextField(retries, { retries = it.filter(Char::isDigit) }, label = { Text("Retries 0–3") }, singleLine = true)
+        }
+    }, confirmButton = {
+        Button(onClick = {
+            manager.save(initial.copy(model = model.trim(), endpoint = endpoint.trim().ifBlank { null }, priority = priority.toIntOrNull() ?: initial.priority, timeoutMs = timeout.toLongOrNull() ?: initial.timeoutMs, retryCount = retries.toIntOrNull() ?: initial.retryCount), key.takeIf { it.isNotBlank() })
+            onSaved()
+        }) { Text("SAVE") }
+    }, dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } })
 }
