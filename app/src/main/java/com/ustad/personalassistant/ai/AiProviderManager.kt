@@ -12,15 +12,22 @@ class AiProviderManager(context: Context) {
     private val credentialStore = AiCredentialStore(secrets)
 
     init { load() }
-    fun allConfigs(): List<ProviderConfig> = configs.values.sortedBy { it.priority }
+    fun allConfigs(): List<ProviderConfig> = configs.values.sortedWith(compareBy<ProviderConfig> { it.priority }.thenBy { it.providerId })
     fun get(providerId: String): ProviderConfig? = configs[providerId]
     fun routingPolicy(): RoutingPolicy = runCatching { RoutingPolicy.valueOf(prefs.getString("routing_policy", RoutingPolicy.PRIVACY_FIRST.name)!!) }.getOrDefault(RoutingPolicy.PRIVACY_FIRST)
     fun setRoutingPolicy(policy: RoutingPolicy) { prefs.edit().putString("routing_policy", policy.name).apply() }
 
     fun save(config: ProviderConfig, apiKey: String? = null) {
         require(config.providerId.matches(Regex("[a-z0-9._-]{2,40}")))
-        configs[config.providerId] = config.copy(priority = config.priority.coerceIn(1, 999), retryCount = config.retryCount.coerceIn(0, 3), timeoutMs = config.timeoutMs.coerceIn(1_000L, 120_000L))
-        if (apiKey != null) credentialStore.saveApiKey(config.providerId, apiKey.trim())
+        configs[config.providerId] = config.copy(
+            displayName = config.displayName.ifBlank { config.providerId },
+            model = config.model.trim(),
+            endpoint = config.endpoint?.trim()?.ifBlank { null },
+            priority = config.priority.coerceIn(1, 999),
+            retryCount = config.retryCount.coerceIn(0, 3),
+            timeoutMs = config.timeoutMs.coerceIn(1_000L, 120_000L)
+        )
+        if (apiKey != null) credentialStore.saveApiKey(config.providerId, apiKey)
         persist()
     }
     fun removeApiKey(providerId: String) { credentialStore.removeApiKey(providerId) }
@@ -28,7 +35,7 @@ class AiProviderManager(context: Context) {
     fun maskedKey(providerId: String): String = credentialStore.masked(providerId)
     fun hasKey(providerId: String): Boolean = credentialStore.hasApiKey(providerId)
     fun providers(): List<AiProvider> = allConfigs().map { config -> HttpAiProvider(config, apiKey = { secrets.get("api_key_${config.providerId}") }) }
-    fun buildApiManager(networkState: () -> NetworkState = { NetworkState.ONLINE }): ApiManager = ApiManager(providers(), networkState)
+    fun buildApiManager(networkState: () -> NetworkState = { NetworkState.ONLINE }): ApiManager = ApiManager({ providers() }, networkState)
 
     private fun load() {
         val raw = prefs.getString("configs", null)
@@ -41,11 +48,14 @@ class AiProviderManager(context: Context) {
                 val config = ProviderConfig(o.getString("providerId"), o.optString("displayName"), o.optBoolean("enabled"), o.optInt("priority", 100), o.optString("model"), o.optString("endpoint").ifBlank { null }, caps, o.optLong("timeoutMs", 30_000L), o.optInt("retryCount", 1))
                 configs[config.providerId] = config
             }
-        }.onFailure { DefaultProviderSlots.configs().forEach { configs[it.providerId] = it }; persist() }
+            val missing = DefaultProviderSlots.configs().filter { defaults -> configs[defaults.providerId] == null }
+            missing.forEach { configs[it.providerId] = it }
+            if (missing.isNotEmpty()) persist()
+        }.onFailure { configs.clear(); DefaultProviderSlots.configs().forEach { configs[it.providerId] = it }; persist() }
     }
     private fun persist() {
         val array = JSONArray()
-        configs.values.forEach { c -> array.put(JSONObject().apply { put("providerId", c.providerId); put("displayName", c.displayName); put("enabled", c.enabled); put("priority", c.priority); put("model", c.model); put("endpoint", c.endpoint ?: ""); put("timeoutMs", c.timeoutMs); put("retryCount", c.retryCount); put("capabilities", JSONArray(c.capabilities.map { it.name })) }) }
+        allConfigs().forEach { c -> array.put(JSONObject().apply { put("providerId", c.providerId); put("displayName", c.displayName); put("enabled", c.enabled); put("priority", c.priority); put("model", c.model); put("endpoint", c.endpoint ?: ""); put("timeoutMs", c.timeoutMs); put("retryCount", c.retryCount); put("capabilities", JSONArray(c.capabilities.map { it.name })) }) }
         prefs.edit().putString("configs", array.toString()).apply()
     }
 }
