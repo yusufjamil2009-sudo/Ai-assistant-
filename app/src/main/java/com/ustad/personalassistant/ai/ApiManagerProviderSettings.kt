@@ -1,9 +1,6 @@
 package com.ustad.personalassistant.ai
 
-/**
- * Data contract for user-editable API provider settings.
- * The concrete UI should persist keys only through SecureConfigStore.
- */
+/** User-facing provider configuration catalog. Credentials are never embedded here. */
 data class ApiProviderSetting(
     val providerId: String,
     val displayName: String,
@@ -15,6 +12,11 @@ data class ApiProviderSetting(
 )
 
 object DefaultAiProviderCatalog {
+    /**
+     * All cloud providers are configurable. Lower priority number = tried earlier.
+     * The router may automatically fail over to the next eligible provider after
+     * authentication, rate-limit, timeout, server, or network failures.
+     */
     val providers = listOf(
         ApiProviderSetting("gemini", "Google Gemini", priority = 1, model = "gemini-2.5-flash"),
         ApiProviderSetting("openrouter", "OpenRouter", priority = 2, model = "openai/gpt-oss-20b:free"),
