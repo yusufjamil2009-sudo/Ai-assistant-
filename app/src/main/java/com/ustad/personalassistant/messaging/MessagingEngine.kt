@@ -4,13 +4,12 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.net.Uri
 import android.telephony.SmsManager
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
 import java.util.concurrent.ConcurrentHashMap
 
-private abstract class BaseIntentMessagingAdapter(
+abstract class BaseIntentMessagingAdapter(
     protected val context: Context,
     override val platform: MessagingPlatform,
     private val packageName: String
@@ -117,13 +116,12 @@ class DefaultMessagingEngine(
         if (!request.authenticatedVoice) return MessageResult(MessageState.FAILED, MessageErrorCode.PROTECTED_ACTION, "Authenticated assistant voice session required.")
         if (request.text.isBlank() || SensitiveMessageDetector.isSensitive(request.text)) return MessageResult(MessageState.FAILED, MessageErrorCode.SENSITIVE_CONTENT_BLOCKED)
         if (request.attachments.isNotEmpty() && request.attachments.any { it.type != AttachmentType.TEXT }) return MessageResult(MessageState.FAILED, MessageErrorCode.UNSUPPORTED_FEATURE)
-        if (request.confirmed) return MessageResult(MessageState.PREPARING_MESSAGE)
-        return MessageResult(MessageState.WAITING_FOR_CONFIRMATION, message = "Confirmation required before sending.")
+        return if (request.confirmed) MessageResult(MessageState.PREPARING_MESSAGE) else MessageResult(MessageState.WAITING_FOR_CONFIRMATION, message = "Confirmation required before sending.")
     }
 
     override fun send(request: MessageSendRequest): MessageResult {
-        val prepared = prepare(request.copy(confirmed = false))
-        if (prepared.state != MessageState.WAITING_FOR_CONFIRMATION) return prepared
+        val prepared = prepare(request)
+        if (prepared.state == MessageState.FAILED) return prepared
         if (!request.confirmed) return prepared
         if (cancelled.contains(request.actionId)) return MessageResult(MessageState.CANCELLED, MessageErrorCode.USER_CANCELLED)
         val now = System.currentTimeMillis()
@@ -133,8 +131,8 @@ class DefaultMessagingEngine(
         if (!provider.isAvailable()) return MessageResult(MessageState.FAILED, MessageErrorCode.APP_NOT_INSTALLED)
         if (cancelled.contains(request.actionId)) return MessageResult(MessageState.CANCELLED, MessageErrorCode.USER_CANCELLED)
         completedActions[request.actionId] = now
-        val result = provider.send(request).getOrElse { MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message) }
-        return if (result.state == MessageState.SUCCESS) result.copy(state = MessageState.SUCCESS, message = result.message ?: "Message request completed.") else result
+        val result: MessageResult = provider.send(request).getOrElse { MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message) }
+        return result
     }
 
     override fun read(platform: MessagingPlatform, contact: String?, limit: Int): MessageResult {
