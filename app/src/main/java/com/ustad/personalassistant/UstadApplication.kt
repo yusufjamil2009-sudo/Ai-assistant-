@@ -19,7 +19,7 @@ class UstadApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         permissionManager = AndroidPermissionManager(this)
-        appStateRepository = AppStateRepositoryImpl(this, permissionManager)
+        appStateRepository = AppStateRepositoryImpl(permissionManager)
         settingsRepository = SettingsRepositoryImpl(this)
         securityManager = SecurityManagerImpl()
     }
