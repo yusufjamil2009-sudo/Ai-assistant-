@@ -1,38 +1,35 @@
 # USTAD Personal AI Assistant
 
-Part 02 extends the existing native Android foundation with a centralized, real-state Permission & Capability Engine.
+Native Kotlin + Jetpack Compose personal assistant foundation built incrementally across Parts 01–03.
 
-## Stack
+## Part 01 — Core foundation
+- Modular AI, voice, command, permission, action, security and protected-app contracts.
+- Persistent settings and Android Keystore-backed secure configuration.
+- Real Android capability/permission state; no fake permission toggles.
+- Security-first action boundary and Protected Apps policy.
 
-- Kotlin
-- Jetpack Compose + Material 3
-- Lifecycle-aware state with StateFlow
-- Coroutines
-- DataStore for non-secret preferences
-- Android Keystore-backed encrypted configuration storage
-- Modular permission, capability, security, repository and service contracts
+## Part 02 — Capability + safe automation foundation
+- Central `CapabilityEngine` / `CapabilityGate`.
+- Android Accessibility action engine with semantic-node operations, verification and timeouts.
+- Automation policy and protected-app firewall.
+- WhatsApp notification/intent/accessibility integration hooks without private database scraping or encryption bypass.
+- Gmail/Google OAuth contracts and safe confirmation policies.
+- Financial-app automation, authentication interception and lock-screen bypass remain blocked.
 
-## Part 02 scope
+## Part 03 — AI brain + central API manager
+- Central `AiBrain`, structured `AiRequest` / `AiResponse`, intent/entity/action-plan models.
+- On-device AI state contract with safe unavailable fallback when no local runtime is present.
+- Configurable Gemini, OpenRouter, Groq, Mistral, SambaNova and Zhipu provider slots.
+- Central `ApiManager` with priority routing, capability matching, retry/backoff/jitter, cooldown, timeout isolation, failover, offline handling and usage/health tracking.
+- Keystore-backed API-key storage with masked UI-ready credential access.
+- Persistent provider configuration and routing policy (`PRIVACY_FIRST`, `BALANCED`, `CLOUD_FIRST`).
+- Generic HTTP provider adapter; provider-specific API mapping can be supplied without changing the router.
+- Validated action plans never execute directly from model output; existing capability/security/protected-app pipeline remains the execution boundary.
+- Conversation context is bounded and kept lightweight.
 
-Implemented on top of Part 01:
+## Safety / intentionally deferred
+No lock-screen bypass, biometric/PIN interception, covert microphone operation, financial-app automation, private WhatsApp database scraping, encryption bypass, wake-word engine, real voice-authentication model, Deepgram/AssemblyAI/ElevenLabs integration, incoming-call automation, or full Gmail/WhatsApp workflows are implemented by these foundations.
 
-- Centralized `CapabilityEngine` and reusable `CapabilityGate`
-- Real Android runtime permission verification for microphone, camera, contacts, location and phone calls
-- Real Notification Listener and Accessibility Service state detection
-- Android Settings launchers with resume-time refresh
-- Permanent-denial handling that can open the app's Android settings page
-- Open Apps capability based on package-manager launchability, with no fake runtime permission
-- Modern photo/file picker capability contracts without broad storage access
-- Background assistant capability foundation with foreground-service and battery-state checks
-- Secure voice-authentication enrollment/enable-state foundation without storing raw voice recordings
-- Gmail and Google Account OAuth connection interfaces without hard-coded secrets or passwords
-- Capability-aware action execution boundary before security/protected-app checks
-- Structured permission, OAuth, capability and security error states
-- Expanded unit tests for capability availability, action gating and protected-app blocking
-- Lightweight futuristic Permission Center presentation while preserving mobile-first behavior
+Cloud provider credentials are never hard-coded or logged. Costs are only recorded when a provider explicitly supplies usage/cost metadata; the app does not invent provider pricing.
 
-## Intentionally not implemented
-
-AI provider routing, Gemini, OpenRouter, Groq, Mistral, SambaNova, Zhipu, voice provider integrations, ElevenLabs, Deepgram, AssemblyAI, wake word, real voice-authentication model, WhatsApp/Messenger automation, Gmail message operations, complete call assistant, automatic call answering, advanced Accessibility automation, device diagnostics, financial-app automation, lock-screen bypass, and covert background microphone operation.
-
-Future parts must extend these contracts rather than rebuild, duplicate, migrate or replace the foundation.
+Build validation is performed by GitHub Actions where available.
