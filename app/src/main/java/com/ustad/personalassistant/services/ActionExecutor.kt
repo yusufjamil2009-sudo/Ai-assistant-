@@ -2,6 +2,7 @@ package com.ustad.personalassistant.services
 
 import com.ustad.personalassistant.capability.CapabilityEngine
 import com.ustad.personalassistant.domain.UstadError
+import com.ustad.personalassistant.domain.userMessage
 import com.ustad.personalassistant.permissions.Capability
 import com.ustad.personalassistant.security.SecurityManager
 
