@@ -7,9 +7,28 @@ plugins {
 android {
     namespace = "com.ustad.personalassistant"
     compileSdk = 36
-    defaultConfig { applicationId = "com.ustad.personalassistant"; minSdk = 26; targetSdk = 36; versionCode = 1; versionName = "0.1.0" }
+    defaultConfig { applicationId = "com.ustad.personalassistant"; minSdk = 26; targetSdk = 36; versionCode = 2; versionName = "0.1.1" }
     buildFeatures { compose = true; buildConfig = true }
-    buildTypes { getByName("debug") { buildConfigField("String", "GMAIL_CLIENT_ID", "\"${providers.gradleProperty("GMAIL_CLIENT_ID").orNull ?: ""}\"") } }
+    buildTypes {
+        getByName("debug") {
+            buildConfigField("String", "GMAIL_CLIENT_ID", "\"${providers.gradleProperty("GMAIL_CLIENT_ID").orNull ?: ""}\"")
+        }
+        getByName("release") {
+            val ciKeystore = System.getenv("CI_KEYSTORE_FILE")
+            val ciStorePassword = System.getenv("CI_KEYSTORE_PASSWORD")
+            val ciKeyAlias = System.getenv("CI_KEY_ALIAS")
+            val ciKeyPassword = System.getenv("CI_KEY_PASSWORD")
+            if (!ciKeystore.isNullOrBlank() && !ciStorePassword.isNullOrBlank() && !ciKeyAlias.isNullOrBlank() && !ciKeyPassword.isNullOrBlank()) {
+                signingConfig = signingConfigs.create("ciRelease").apply {
+                    storeFile = file(ciKeystore)
+                    storePassword = ciStorePassword
+                    keyAlias = ciKeyAlias
+                    keyPassword = ciKeyPassword
+                }
+            }
+            buildConfigField("String", "GMAIL_CLIENT_ID", "\"${providers.gradleProperty("GMAIL_CLIENT_ID").orNull ?: ""}\"")
+        }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
