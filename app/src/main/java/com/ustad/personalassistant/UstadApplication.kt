@@ -17,7 +17,7 @@ import com.ustad.personalassistant.gmail.UnconfiguredGmailRepository
 import com.ustad.personalassistant.permissions.AndroidPermissionManager
 import com.ustad.personalassistant.security.SecureConfigStore
 import com.ustad.personalassistant.security.SecurityManagerImpl
-import com.ustad.personalassistant.services.UstadAccessibilityService
+import com.ustad.personalassistant.services.AdvancedAccessibilityService
 
 class UstadApplication : Application() {
     lateinit var permissionManager: AndroidPermissionManager; private set
@@ -37,7 +37,7 @@ class UstadApplication : Application() {
         settingsRepository = SettingsRepositoryImpl(this)
         securityManager = SecurityManagerImpl()
         automationPolicy = DefaultAutomationPolicy()
-        accessibilityActionEngine = AndroidAccessibilityActionEngine({ UstadAccessibilityService.active }, securityManager)
+        accessibilityActionEngine = AndroidAccessibilityActionEngine({ AdvancedAccessibilityService.active }, securityManager)
         val gmailState = SecureGmailAuthStateStore(SecureConfigStore(this, "gmail_auth_state"))
         gmailService = DefaultGmailService(UnconfiguredGmailRepository(), UnconfiguredGmailAuthManager(gmailState))
     }
