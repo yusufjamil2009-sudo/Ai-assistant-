@@ -31,6 +31,13 @@ import com.ustad.personalassistant.gmail.GmailService
 import com.ustad.personalassistant.gmail.SecureGmailAuthStateStore
 import com.ustad.personalassistant.gmail.UnconfiguredGmailAuthManager
 import com.ustad.personalassistant.gmail.UnconfiguredGmailRepository
+import com.ustad.personalassistant.messaging.AndroidContactResolver
+import com.ustad.personalassistant.messaging.DefaultMessagingEngine
+import com.ustad.personalassistant.messaging.MessengerAdapter
+import com.ustad.personalassistant.messaging.MessageProvider
+import com.ustad.personalassistant.messaging.SmsAdapter
+import com.ustad.personalassistant.messaging.WhatsAppAdapter
+import com.ustad.personalassistant.messaging.MessagingEngine
 import com.ustad.personalassistant.permissions.AndroidPermissionManager
 import com.ustad.personalassistant.security.SecureConfigStore
 import com.ustad.personalassistant.security.SecurityManagerImpl
@@ -58,6 +65,7 @@ class UstadApplication : Application() {
     lateinit var appResolver: AndroidAppResolver; private set
     lateinit var appAutomationEngine: AndroidAppAutomationEngine; private set
     lateinit var photoFilePicker: PhotoFilePicker; private set
+    lateinit var messagingEngine: MessagingEngine; private set
     lateinit var gmailService: GmailService; private set
     lateinit var aiProviderManager: AiProviderManager; private set
     lateinit var networkMonitor: AndroidNetworkMonitor; private set
@@ -88,6 +96,7 @@ class UstadApplication : Application() {
         photoFilePicker = AndroidPhotoFilePicker()
         val gmailState = SecureGmailAuthStateStore(SecureConfigStore(this, "gmail_auth_state")); gmailService = DefaultGmailService(UnconfiguredGmailRepository(), UnconfiguredGmailAuthManager(gmailState))
         aiProviderManager = AiProviderManager(this); networkMonitor = AndroidNetworkMonitor(this); val apiManager = aiProviderManager.buildApiManager { networkMonitor.state() }; aiBrain = CentralAiBrain(UnavailableOnDeviceAiProvider(), apiManager) { aiProviderManager.routingPolicy() }
+        messagingEngine = DefaultMessagingEngine(this, AndroidContactResolver(this), aiBrain, listOf<MessageProvider>(WhatsAppAdapter(this), MessengerAdapter(this), SmsAdapter(this)))
         actionExecutor = GuardedActionExecutor(securityManager, capabilityEngine, appAutomationEngine)
         automationPipeline = AutomationPipeline(capabilityEngine, securityManager, automationPolicy, { action, target -> actionExecutor.execute(action, target) })
         confirmationPolicy = DefaultConfirmationPolicy(); aiAutomationOrchestrator = AiAutomationOrchestrator(aiBrain, automationPipeline, confirmationPolicy)

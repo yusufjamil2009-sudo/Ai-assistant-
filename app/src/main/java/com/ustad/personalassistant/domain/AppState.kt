@@ -16,7 +16,8 @@ data class AppState(
     val openAppsCapability: CapabilityStatus = CapabilityStatus.ON,
     val backgroundAssistantStatus: CapabilityStatus = CapabilityStatus.NOT_AVAILABLE,
     val gmailConnection: CapabilityStatus = CapabilityStatus.CONNECT,
-    val googleAccountConnection: CapabilityStatus = CapabilityStatus.CONNECT
+    val googleAccountConnection: CapabilityStatus = CapabilityStatus.CONNECT,
+    val smsCapability: CapabilityStatus = CapabilityStatus.OFF
 )
 
 data class CapabilityInfo(val title: String, val description: String, val status: CapabilityStatus)
