@@ -1,6 +1,5 @@
 package com.ustad.personalassistant.background
 
-import android.app.ActivityManager
 import android.content.Context
 import android.os.PowerManager
 
