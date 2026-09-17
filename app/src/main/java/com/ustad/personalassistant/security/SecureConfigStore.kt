@@ -8,6 +8,8 @@ import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
 
 class SecureConfigStore(context: Context) {
     private val preferences = context.getSharedPreferences("secure_config", Context.MODE_PRIVATE)
@@ -24,6 +26,7 @@ class SecureConfigStore(context: Context) {
     fun get(key: String): String? = runCatching {
         val raw = preferences.getString(key, null) ?: return null
         val bytes = Base64.decode(raw, Base64.NO_WRAP)
+        require(bytes.size > 12)
         val iv = bytes.copyOfRange(0, 12)
         val encrypted = bytes.copyOfRange(12, bytes.size)
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
@@ -34,10 +37,17 @@ class SecureConfigStore(context: Context) {
     private fun getOrCreateKey(): SecretKey {
         val keyStore = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
         (keyStore.getKey(keyAlias, null) as? SecretKey)?.let { return it }
-        return KeyGenerator.getInstance("AES", "AndroidKeyStore").apply {
-            init(256)
-        }.generateKey().also {
-            // Key is retained by Android Keystore; no key material is written to preferences.
-        }
+        return KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore").apply {
+            init(
+                KeyGenParameterSpec.Builder(
+                    keyAlias,
+                    KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+                )
+                    .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                    .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                    .setKeySize(256)
+                    .build()
+            )
+        }.generateKey()
     }
 }
