@@ -2,7 +2,6 @@ package com.ustad.personalassistant.appcontrol
 
 import com.ustad.personalassistant.accessibility.AccessibilityActionEngine
 import com.ustad.personalassistant.accessibility.AccessibilityActionStatus
-import com.ustad.personalassistant.automation.AutomationResultStatus
 import com.ustad.personalassistant.capability.CapabilityEngine
 import com.ustad.personalassistant.permissions.Capability
 import com.ustad.personalassistant.security.SecurityManager
@@ -36,8 +35,7 @@ class AndroidAppAutomationEngine(
     private val adapters: List<AppAutomationAdapter> = listOf(GenericAndroidAppAdapter())
 ) {
     @Volatile private var cancelled = false
-
-    fun cancel() { cancelled = true }
+    fun cancel() { cancelled = true; accessibility.cancelPendingOperations() }
     fun resetCancellation() { cancelled = false }
 
     fun openApp(query: String): AutomationEngineResult<Unit> {
@@ -98,13 +96,15 @@ class AndroidAppAutomationEngine(
 
     private fun scroll(forward: Boolean, attempts: Int, timeout: Long, expected: String?): AutomationEngineResult<String> {
         if (!preflight(null, "scroll")) return AutomationEngineResult(AutomationEngineStatus.SECURITY_BLOCKED)
+        var lastStatus = AccessibilityActionStatus.ACTION_NOT_SUPPORTED
         repeat(attempts.coerceIn(1, 10)) {
             if (cancelled) return AutomationEngineResult(AutomationEngineStatus.CANCELLED)
             val result = if (forward) accessibility.scrollForward() else accessibility.scrollBackward()
+            lastStatus = result.status
             if (!result.isSuccess) return@repeat
             if (expected == null || verification.verifyVisibleText(expected, timeout)) return AutomationEngineResult(AutomationEngineStatus.SUCCESS)
         }
-        return if (expected == null) AutomationEngineResult(AutomationEngineStatus.ACTION_NOT_SUPPORTED) else AutomationEngineResult(AutomationEngineStatus.TIMEOUT)
+        return if (expected == null) map(lastStatus) else AutomationEngineResult(AutomationEngineStatus.TIMEOUT)
     }
 
     private fun back(timeout: Long, expected: String?): AutomationEngineResult<String> {
@@ -130,7 +130,7 @@ class AndroidAppAutomationEngine(
         return packageName == null || adapters.any { it.supports(packageName) }
     }
 
-    private fun map(status: AccessibilityActionStatus): AutomationEngineResult<Nothing> = AutomationEngineResult(
+    private fun <T> map(status: AccessibilityActionStatus): AutomationEngineResult<T> = AutomationEngineResult(
         when (status) {
             AccessibilityActionStatus.SUCCESS -> AutomationEngineStatus.SUCCESS
             AccessibilityActionStatus.NODE_NOT_FOUND -> AutomationEngineStatus.NODE_NOT_FOUND
