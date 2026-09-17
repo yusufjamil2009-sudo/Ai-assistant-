@@ -1,0 +1,72 @@
+package com.ustad.personalassistant.gmail
+
+import android.util.Base64
+import org.json.JSONObject
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.HttpURLConnection
+import java.net.URL
+import java.nio.charset.StandardCharsets
+
+interface GmailAccessTokenProvider { fun accessToken(): Result<String> }
+
+class GmailApiAdapter(private val tokens: GmailAccessTokenProvider) : GmailRepository {
+    private val base = "https://gmail.googleapis.com/gmail/v1/users/me"
+    override fun listEmails(maxResults: Int): Result<List<GmailMessage>> = searchEmails("is:inbox", maxResults)
+    override fun searchEmails(query: String, maxResults: Int): Result<List<GmailMessage>> {
+        val bounded = maxResults.coerceIn(1, 50)
+        if (query.isBlank() || query.length > 200) return Result.failure(IllegalArgumentException("Invalid Gmail query"))
+        return request("GET", "$base/messages?q=${encode(query)}&maxResults=$bounded").map { parseList(it) }
+    }
+    override fun readEmail(id: String): Result<GmailMessage> {
+        if (id.isBlank() || id.length > 200) return Result.failure(IllegalArgumentException("Invalid message id"))
+        return request("GET", "$base/messages/${encode(id)}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject&metadataHeaders=Date").map { parseMessage(it) }
+    }
+    override fun draftEmail(message: GmailMessage): Result<String> {
+        val raw = mime(message.to.orEmpty(), message.subject.orEmpty(), message.body.orEmpty())
+        val payload = JSONObject().put("message", JSONObject().put("raw", raw))
+        return request("POST", "$base/drafts", payload.toString()).map { JSONObject(it).optJSONObject("draft")?.optString("id").orEmpty().ifBlank { JSONObject(it).optString("id") } }
+    }
+    override fun sendEmail(draftId: String): Result<String> {
+        if (draftId.isBlank()) return Result.failure(IllegalArgumentException("Invalid draft id"))
+        return request("POST", "$base/drafts/send", JSONObject().put("id", draftId).toString()).map { JSONObject(it).optString("id") }
+    }
+    override fun replyToEmail(id: String, body: String): Result<String> {
+        if (id.isBlank() || body.isBlank() || body.length > 20_000) return Result.failure(IllegalArgumentException("Invalid reply"))
+        return readEmail(id).flatMap { original ->
+            val raw = mime(original.to.orEmpty(), "Re: ${original.subject.orEmpty()}", body)
+            val payload = JSONObject().put("raw", raw).put("threadId", original.threadId.orEmpty())
+            request("POST", "$base/messages/send", payload.toString()).map { JSONObject(it).optString("id") }
+        }
+    }
+    override fun markRead(id: String, read: Boolean): Result<Unit> {
+        val body = if (read) JSONObject().put("removeLabelIds", org.json.JSONArray().put("UNREAD")) else JSONObject().put("addLabelIds", org.json.JSONArray().put("UNREAD"))
+        return request("POST", "$base/messages/$id/modify", body.toString()).map { Unit }
+    }
+    private fun request(method: String, url: String, body: String? = null): Result<String> = runCatching {
+        val token = tokens.accessToken().getOrThrow()
+        val connection = URL(url).openConnection() as HttpURLConnection
+        connection.requestMethod = method; connection.connectTimeout = 10_000; connection.readTimeout = 15_000
+        connection.setRequestProperty("Authorization", "Bearer $token"); connection.setRequestProperty("Accept", "application/json")
+        if (body != null) { connection.doOutput = true; connection.setRequestProperty("Content-Type", "application/json"); connection.outputStream.use { it.write(body.toByteArray(StandardCharsets.UTF_8)) } }
+        val code = connection.responseCode
+        val stream = if (code in 200..299) connection.inputStream else connection.errorStream
+        val text = stream?.let { BufferedReader(InputStreamReader(it, StandardCharsets.UTF_8)).use { r -> r.readText() } }.orEmpty()
+        connection.disconnect()
+        if (code !in 200..299) throw IllegalStateException("Gmail API HTTP $code")
+        text
+    }
+    private fun parseList(json: String): List<GmailMessage> {
+        val root = JSONObject(json); val messages = root.optJSONArray("messages") ?: return emptyList(); val out = mutableListOf<GmailMessage>()
+        for (i in 0 until messages.length()) { val id = messages.optJSONObject(i)?.optString("id").orEmpty(); if (id.isNotBlank()) readEmail(id).getOrNull()?.let(out::add) }
+        return out.take(50)
+    }
+    private fun parseMessage(json: String): GmailMessage {
+        val root = JSONObject(json); val headers = root.optJSONObject("payload")?.optJSONArray("headers"); var from: String? = null; var to: String? = null; var subject: String? = null; var date: String? = null
+        if (headers != null) for (i in 0 until headers.length()) { val h = headers.optJSONObject(i); when (h?.optString("name")?.lowercase()) { "from" -> from = h.optString("value"); "to" -> to = h.optString("value"); "subject" -> subject = h.optString("value"); "date" -> date = h.optString("value") } }
+        val labelIds = root.optJSONArray("labelIds"); var unread = false; if (labelIds != null) for (i in 0 until labelIds.length()) if (labelIds.optString(i) == "UNREAD") unread = true
+        return GmailMessage(root.optString("id"), root.optString("threadId").ifBlank { null }, from, to, subject, root.optString("snippet").ifBlank { null }, unread)
+    }
+    private fun mime(to: String, subject: String, body: String): String { val content = "To: $to\r\nSubject: $subject\r\nContent-Type: text/plain; charset=UTF-8\r\n\r\n$body"; return Base64.encodeToString(content.toByteArray(StandardCharsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING) }
+    private fun encode(value: String) = java.net.URLEncoder.encode(value, "UTF-8")
+}
