@@ -13,16 +13,20 @@ interface ProtectedAppPolicy {
 }
 
 class DefaultProtectedAppPolicy : ProtectedAppPolicy {
-    private val blockedMarkers = listOf("bank", "banking", "upi", "wallet", "payment", "finance", "finserv", "paytm", "phonepe", "gpay")
     private val protectedPackages = setOf(
         "com.phonepe.app",
         "com.google.android.apps.nbu.paisa.user",
         "com.google.android.apps.walletnfcrel",
         "net.one97.paytm"
     )
+    private val protectedMarkers = listOf(
+        "bank", "banking", "upi", "wallet", "payment", "finance", "finserv", "paytm", "phonepe", "gpay"
+    )
+
     override fun isProtected(packageName: String): Boolean {
-        val normalized = packageName.lowercase()
-        return normalized in protectedPackages || blockedMarkers.any { normalized.contains(it) }
+        val normalized = packageName.trim().lowercase()
+        if (normalized.isBlank()) return false
+        return normalized in protectedPackages || protectedMarkers.any { normalized.contains(it) }
     }
 }
 
@@ -31,5 +35,7 @@ class SecurityManagerImpl(
 ) : SecurityManager {
     override fun isActionAuthorized(action: String): Boolean = action.isNotBlank()
     override fun isProtectedApp(packageName: String): Boolean = protectedAppPolicy.isProtected(packageName)
-    override fun audit(event: String) { require(event.length <= 200) { UstadError.ConfigurationError.toString() } }
+    override fun audit(event: String) {
+        require(event.length <= 200) { UstadError.ConfigurationError.toString() }
+    }
 }
