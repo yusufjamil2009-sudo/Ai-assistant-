@@ -3,10 +3,7 @@ package com.ustad.personalassistant.ai
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeout
 import kotlin.random.Random
 
 class ApiManager(
@@ -23,13 +20,17 @@ class ApiManager(
     fun health(providerId: String): ProviderHealth = health[providerId] ?: providers.firstOrNull { it.providerId == providerId }?.healthCheck() ?: ProviderHealth()
 
     fun generate(request: AiRequest): Result<AiResponse> = generateInternal(request)
-
     fun generateAsync(scope: CoroutineScope, request: AiRequest, onResult: (Result<AiResponse>) -> Unit): Job = scope.launch(Dispatchers.IO) { onResult(generateInternal(request)) }
 
-    suspend fun generateSuspend(request: AiRequest): Result<AiResponse> = withContext(Dispatchers.IO) {
-        val provider = selectProvider(request)
-        if (provider == null) return@withContext if (networkState() == NetworkState.OFFLINE) Result.failure(AiException(AiErrorCode.OFFLINE)) else Result.failure(AiException(AiErrorCode.NO_PROVIDER_AVAILABLE))
-        generateInternal(request)
+    fun stream(request: AiRequest, onEvent: (AiStreamEvent) -> Unit): Result<AiResponse> {
+        if (networkState() == NetworkState.OFFLINE) return Result.failure(AiException(AiErrorCode.OFFLINE))
+        val provider = selectProvider(request) ?: return Result.failure(AiException(AiErrorCode.NO_PROVIDER_AVAILABLE))
+        onEvent(AiStreamEvent(AiStreamEventType.START))
+        val started = clock()
+        val result = provider.stream(request) { event -> onEvent(event) }
+        usageTracker.record(provider.providerId, result.getOrNull(), (clock() - started).coerceAtLeast(0L), result.isSuccess)
+        if (result.isFailure) onEvent(AiStreamEvent(AiStreamEventType.ERROR, error = AiError(AiErrorCode.PROVIDER_INVALID_RESPONSE, "Provider stream failed")))
+        return result.map { it.copy(providerId = it.providerId ?: provider.providerId, model = it.model ?: provider.model) }
     }
 
     private fun generateInternal(request: AiRequest): Result<AiResponse> {
@@ -42,11 +43,10 @@ class ApiManager(
                 val started = clock()
                 val result = runProviderWithTimeout(provider, request)
                 val elapsed = (clock() - started).coerceAtLeast(0L)
-                val response = result.getOrNull()
-                usageTracker.record(provider.providerId, response, elapsed, result.isSuccess)
+                usageTracker.record(provider.providerId, result.getOrNull(), elapsed, result.isSuccess)
                 if (result.isSuccess) {
                     health[provider.providerId] = ProviderHealth(ProviderHealthStatus.HEALTHY, elapsed, clock(), health[provider.providerId]?.lastFailure, 0, null)
-                    val normalized = response!!.copy(providerId = response.providerId ?: provider.providerId, model = response.model ?: provider.model)
+                    val normalized = result.getOrThrow().copy(providerId = result.getOrThrow().providerId ?: provider.providerId, model = result.getOrThrow().model ?: provider.model)
                     if (normalized.actionPlan?.let { DefaultActionPlanValidator().validate(it) } == false) return Result.failure(AiException(AiErrorCode.INVALID_AI_RESPONSE))
                     return Result.success(normalized)
                 }
