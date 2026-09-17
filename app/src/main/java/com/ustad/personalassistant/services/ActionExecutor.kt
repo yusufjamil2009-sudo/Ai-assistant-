@@ -1,7 +1,10 @@
 package com.ustad.personalassistant.services
 
 import com.ustad.personalassistant.appcontrol.AndroidAppAutomationEngine
+import com.ustad.personalassistant.appcontrol.AutomationEngineResult
 import com.ustad.personalassistant.appcontrol.AutomationEngineStatus
+import com.ustad.personalassistant.appcontrol.AutomationPlan
+import com.ustad.personalassistant.appcontrol.AutomationStep
 import com.ustad.personalassistant.capability.CapabilityEngine
 import com.ustad.personalassistant.domain.UstadError
 import com.ustad.personalassistant.domain.userMessage
@@ -23,19 +26,18 @@ class GuardedActionExecutor(
         if (packageName != null && securityManager.isProtectedApp(packageName)) return Result.failure(IllegalStateException(UstadError.SecurityBlocked.userMessage()))
         if (!securityManager.isActionAuthorized(action)) return Result.failure(IllegalStateException(UstadError.AuthenticationRequired.userMessage()))
         val kind = action.substringBefore(":").trim().lowercase()
-        if (appAutomationEngine != null && kind in setOf("open_app", "click", "long_click", "set_text", "scroll_forward", "scroll_backward", "back", "read_visible", "cancel")) {
-            val result = when (kind) {
-                "open_app" -> appAutomationEngine.openApp(action.substringAfter(":").trim())
-                "click" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.FindAndClick(action.substringAfter(":").trim()))))
-                "long_click" -> Result.failure(UnsupportedOperationException("long_click requires an explicit UI step adapter"))
-                "set_text" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.SetText(action.substringAfter(":").trim()))))
-                "scroll_forward" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.Scroll(true))))
-                "scroll_backward" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.Scroll(false))))
-                "back" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.PressBack())))
-                "read_visible" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.ReadVisibleText())))
-                else -> { appAutomationEngine.cancel(); com.ustad.personalassistant.appcontrol.AutomationEngineResult(AutomationEngineStatus.CANCELLED) }
+        if (appAutomationEngine != null && kind in setOf("open_app", "click", "set_text", "scroll_forward", "scroll_backward", "back", "read_visible", "cancel")) {
+            val result: Result<Unit> = when (kind) {
+                "open_app" -> appAutomationEngine.openApp(action.substringAfter(":").trim()).asUnitResult()
+                "click" -> appAutomationEngine.execute(AutomationPlan(listOf(AutomationStep.FindAndClick(action.substringAfter(":").trim())))).asUnitResult()
+                "set_text" -> appAutomationEngine.execute(AutomationPlan(listOf(AutomationStep.SetText(action.substringAfter(":").trim())))).asUnitResult()
+                "scroll_forward" -> appAutomationEngine.execute(AutomationPlan(listOf(AutomationStep.Scroll(true)))).asUnitResult()
+                "scroll_backward" -> appAutomationEngine.execute(AutomationPlan(listOf(AutomationStep.Scroll(false)))).asUnitResult()
+                "back" -> appAutomationEngine.execute(AutomationPlan(listOf(AutomationStep.PressBack()))).asUnitResult()
+                "read_visible" -> appAutomationEngine.execute(AutomationPlan(listOf(AutomationStep.ReadVisibleText()))).asUnitResult()
+                else -> { appAutomationEngine.cancel(); Result.success(Unit) }
             }
-            if (result.status != AutomationEngineStatus.SUCCESS) return Result.failure(IllegalStateException(result.status.name))
+            if (result.isFailure) return result
         }
         securityManager.audit("authorized action request")
         return Result.success(Unit)
@@ -47,4 +49,6 @@ class GuardedActionExecutor(
         if (missing.isNotEmpty()) return Result.failure(IllegalStateException("Required capability unavailable: ${missing.joinToString { it.name }}"))
         return execute(action, packageName)
     }
+
+    private fun <T> AutomationEngineResult<T>.asUnitResult(): Result<Unit> = if (status == AutomationEngineStatus.SUCCESS) Result.success(Unit) else Result.failure(IllegalStateException(status.name))
 }

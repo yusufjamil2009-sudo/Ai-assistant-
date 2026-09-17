@@ -59,7 +59,7 @@ class AndroidAppAutomationEngine(
         return try {
             for (step in plan.steps) {
                 if (cancelled) return AutomationEngineResult(AutomationEngineStatus.CANCELLED, completedSteps = completed)
-                val result = when (step) {
+                val result: AutomationEngineResult<*> = when (step) {
                     is AutomationStep.OpenApp -> openApp(step.query)
                     is AutomationStep.FindAndClick -> click(step.text, step.timeoutMs, step.expectedText)
                     is AutomationStep.SetText -> setText(step.text, step.timeoutMs, step.expectedText)
@@ -68,7 +68,7 @@ class AndroidAppAutomationEngine(
                     is AutomationStep.ReadVisibleText -> read(step.timeoutMs)
                 }
                 if (result.status != AutomationEngineStatus.SUCCESS) return AutomationEngineResult(result.status, outputs, result.message, completed)
-                result.value?.let { outputs += it }
+                if (result.value is String) outputs += result.value as String
                 completed++
             }
             AutomationEngineResult(AutomationEngineStatus.SUCCESS, outputs, completedSteps = completed)
@@ -118,8 +118,7 @@ class AndroidAppAutomationEngine(
     private fun read(timeout: Long): AutomationEngineResult<String> {
         if (!preflight(null, "read_visible")) return AutomationEngineResult(AutomationEngineStatus.SECURITY_BLOCKED)
         val result = accessibility.readVisibleText()
-        return if (result.isSuccess) AutomationEngineResult(AutomationEngineStatus.SUCCESS, result.value?.joinToString("\n"), completedSteps = 1)
-        else map(result.status)
+        return if (result.isSuccess) AutomationEngineResult(AutomationEngineStatus.SUCCESS, result.value?.joinToString("\n")) else map(result.status)
     }
 
     private fun preflight(packageName: String?, action: String): Boolean {
