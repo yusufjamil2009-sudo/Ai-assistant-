@@ -69,7 +69,9 @@ private fun UstadApp(viewModel: MainViewModel) {
     val activity = LocalContext.current as? MainActivity
 
     DisposableEffect(Unit) {
-        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh() }
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh()
+        }
         activity?.lifecycle?.addObserver(observer)
         onDispose { activity?.lifecycle?.removeObserver(observer) }
     }
@@ -105,13 +107,13 @@ private fun HomeScreen(state: AppState) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Assistant status", style = MaterialTheme.typography.titleLarge)
                 StatusRow("Assistant", if (state.assistantEnabled) CapabilityStatus.ON else CapabilityStatus.OFF)
-                Text("Part 01 foundation is active. Advanced AI, voice, messaging and automation are intentionally not implemented yet.", style = MaterialTheme.typography.bodyMedium)
+                Text("Permission and capability controls are centralized and refreshed from Android system state.", style = MaterialTheme.typography.bodyMedium)
             }
         }
         Card(Modifier.fillMaxWidth()) {
             Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Security baseline", style = MaterialTheme.typography.titleLarge)
-                Text("No lock-screen bypass, silent permission grants, financial-app automation or background microphone loop is implemented.")
+                Text("No lock-screen bypass, silent permission grants, financial-app automation or covert microphone loop is implemented.")
             }
         }
     }
@@ -126,7 +128,7 @@ private fun PermissionCenterScreen(state: AppState, viewModel: MainViewModel, ac
         Capability.APP_CONTROL to ("♿ App Control" to state.accessibilityAccess),
         Capability.PHONE_CALLS to ("📞 Phone Calls" to state.phoneCapability),
         Capability.CONTACTS to ("👤 Contacts" to state.contactsPermission),
-        Capability.OPEN_APPS to ("📱 Open Apps" to CapabilityStatus.ON),
+        Capability.OPEN_APPS to ("📱 Open Apps" to state.openAppsCapability),
         Capability.PHOTOS_FILES to ("📁 Photos & Files" to state.filesCapability),
         Capability.LOCATION to ("📍 Location" to state.locationPermission),
         Capability.CAMERA to ("📷 Camera" to state.cameraPermission),
@@ -136,10 +138,8 @@ private fun PermissionCenterScreen(state: AppState, viewModel: MainViewModel, ac
     )
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text("Permission Center", style = MaterialTheme.typography.headlineMedium)
-        Text("Every status is derived from the current Android/system state or an explicitly unimplemented connection state.")
-        items.forEach { (capability, data) ->
-            CapabilityCard(capability, data.first, data.second, viewModel, activity)
-        }
+        Text("Statuses are derived from Android/system state. Future connections remain unconfigured until their OAuth implementation is added.")
+        items.forEach { (capability, data) -> CapabilityCard(capability, data.first, data.second, viewModel, activity) }
     }
 }
 
@@ -154,9 +154,16 @@ private fun CapabilityCard(capability: Capability, title: String, status: Capabi
                 }
                 StatusRow("Status", status)
             }
-            if (status == CapabilityStatus.OFF || status == CapabilityStatus.ACTION_REQUIRED || status == CapabilityStatus.CONNECT) {
+            if (status == CapabilityStatus.OFF || status == CapabilityStatus.ACTION_REQUIRED || status == CapabilityStatus.CONNECT || status == CapabilityStatus.NOT_ENROLLED) {
                 Button(enabled = activity != null, onClick = { activity?.let { viewModel.request(it, capability) } }) {
-                    Text(if (status == CapabilityStatus.CONNECT) "CONNECT" else if (status == CapabilityStatus.ACTION_REQUIRED) "OPEN SETTINGS" else "ON")
+                    Text(
+                        when (status) {
+                            CapabilityStatus.CONNECT -> "CONNECT"
+                            CapabilityStatus.ACTION_REQUIRED -> "OPEN SETTINGS"
+                            CapabilityStatus.NOT_ENROLLED -> "SET UP"
+                            else -> "ENABLE"
+                        }
+                    )
                 }
             }
         }
@@ -166,12 +173,14 @@ private fun CapabilityCard(capability: Capability, title: String, status: Capabi
 @Composable
 private fun StatusRow(label: String, status: CapabilityStatus) {
     val statusText = when (status) {
+        CapabilityStatus.UNKNOWN -> "UNKNOWN"
         CapabilityStatus.ON -> "ON"
         CapabilityStatus.OFF -> "OFF"
         CapabilityStatus.CONNECT -> "CONNECT"
         CapabilityStatus.CONNECTED -> "CONNECTED"
         CapabilityStatus.NOT_AVAILABLE -> "NOT AVAILABLE"
         CapabilityStatus.ACTION_REQUIRED -> "ACTION REQUIRED"
+        CapabilityStatus.NOT_ENROLLED -> "NOT ENROLLED"
     }
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
         if (status == CapabilityStatus.ON || status == CapabilityStatus.CONNECTED) Icon(Icons.Outlined.CheckCircle, null)
@@ -183,7 +192,7 @@ private fun StatusRow(label: String, status: CapabilityStatus) {
 private fun SettingsScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
-        Text("Foundation settings are intentionally minimal in Part 01.")
+        Text("Foundation settings are intentionally minimal while Part 02 establishes the centralized capability engine.")
         HorizontalDivider()
         listOf("Assistant", "Voice", "AI Providers", "Speech-to-Text", "Text-to-Speech", "Permissions", "Security", "Protected Apps", "Notifications", "Calls", "Gmail", "Google Account", "Data", "Diagnostics", "About").forEach {
             Card(Modifier.fillMaxWidth()) { Text(it, Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium) }
