@@ -13,7 +13,7 @@ data class ActionPlan(val action: String, val target: String? = null, val requir
 data class AiUsage(val inputTokens: Long? = null, val outputTokens: Long? = null, val totalTokens: Long? = null, val estimatedCost: Double? = null)
 data class AiError(val code: AiErrorCode, val message: String)
 data class AiResponse(val text: String, val intent: IntentType = IntentType.CHAT, val confidence: Double = 0.0, val entities: List<AiEntity> = emptyList(), val actionPlan: ActionPlan? = null, val requiresConfirmation: Boolean = false, val providerId: String? = null, val model: String? = null, val usage: AiUsage? = null, val error: AiError? = null)
-enum class AiErrorCode { INVALID_AI_RESPONSE, NO_PROVIDER_AVAILABLE, PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_AUTH_ERROR, PROVIDER_NETWORK_ERROR, PROVIDER_SERVER_ERROR, PROVIDER_INVALID_RESPONSE, PROVIDER_UNSUPPORTED_CAPABILITY, ALL_PROVIDERS_FAILED, OFFLINE, ON_DEVICE_UNAVAILABLE }
+enum class AiErrorCode { INVALID_AI_RESPONSE, NO_PROVIDER_AVAILABLE, PROVIDER_TIMEOUT, PROVIDER_RATE_LIMITED, PROVIDER_AUTH_ERROR, PROVIDER_NETWORK_ERROR, PROVIDER_SERVER_ERROR, PROVIDER_INVALID_RESPONSE, PROVIDER_UNSUPPORTED_CAPABILITY, ALL_PROVIDERS_FAILED, OFFLINE, ON_DEVICE_UNAVAILABLE, SECURITY_BLOCKED }
 
 enum class AiStreamEventType { START, TOKEN, PROGRESS, TOOL_INTENT, COMPLETE, ERROR }
 data class AiStreamEvent(val type: AiStreamEventType, val text: String? = null, val response: AiResponse? = null, val error: AiError? = null)
