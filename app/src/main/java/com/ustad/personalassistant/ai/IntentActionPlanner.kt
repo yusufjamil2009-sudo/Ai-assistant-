@@ -8,7 +8,7 @@ class DefaultIntentParser : IntentParser {
     override fun parse(text: String): IntentType {
         val t = text.trim().lowercase()
         return when {
-            t.startsWith("open ") || t.startsWith("launch ") -> IntentType.OPEN_APP
+            t.startsWith("open ") || t.startsWith("launch ") || t.contains(" kholo") || t.endsWith(" khol") || t.startsWith("khol ") -> IntentType.OPEN_APP
             t.contains("notification") -> IntentType.READ_NOTIFICATION
             t.contains("email") && (t.contains("send") || t.contains("mail to")) -> IntentType.SEND_EMAIL
             t.contains("email") && t.contains("search") -> IntentType.SEARCH_EMAIL

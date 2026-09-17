@@ -1,6 +1,5 @@
 package com.ustad.personalassistant.security
 
-import com.ustad.personalassistant.accessibility.DefaultAutomationPolicy
 import com.ustad.personalassistant.domain.UstadError
 
 interface SecurityManager {
@@ -15,7 +14,16 @@ interface ProtectedAppPolicy {
 
 class DefaultProtectedAppPolicy : ProtectedAppPolicy {
     private val blockedMarkers = listOf("bank", "banking", "upi", "wallet", "payment", "finance", "finserv", "paytm", "phonepe", "gpay")
-    override fun isProtected(packageName: String): Boolean = blockedMarkers.any { packageName.lowercase().contains(it) }
+    private val protectedPackages = setOf(
+        "com.phonepe.app",
+        "com.google.android.apps.nbu.paisa.user",
+        "com.google.android.apps.walletnfcrel",
+        "net.one97.paytm"
+    )
+    override fun isProtected(packageName: String): Boolean {
+        val normalized = packageName.lowercase()
+        return normalized in protectedPackages || blockedMarkers.any { normalized.contains(it) }
+    }
 }
 
 class SecurityManagerImpl(

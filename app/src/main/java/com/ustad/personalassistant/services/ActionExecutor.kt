@@ -1,5 +1,7 @@
 package com.ustad.personalassistant.services
 
+import com.ustad.personalassistant.appcontrol.AndroidAppAutomationEngine
+import com.ustad.personalassistant.appcontrol.AutomationEngineStatus
 import com.ustad.personalassistant.capability.CapabilityEngine
 import com.ustad.personalassistant.domain.UstadError
 import com.ustad.personalassistant.domain.userMessage
@@ -8,43 +10,41 @@ import com.ustad.personalassistant.security.SecurityManager
 
 interface ActionExecutor {
     fun execute(action: String, packageName: String? = null): Result<Unit>
-
-    fun execute(
-        action: String,
-        packageName: String? = null,
-        requiredCapabilities: List<Capability>
-    ): Result<Unit> = execute(action, packageName)
+    fun execute(action: String, packageName: String? = null, requiredCapabilities: List<Capability>): Result<Unit> = execute(action, packageName)
 }
 
 class GuardedActionExecutor(
     private val securityManager: SecurityManager,
-    private val capabilityEngine: CapabilityEngine? = null
+    private val capabilityEngine: CapabilityEngine? = null,
+    private val appAutomationEngine: AndroidAppAutomationEngine? = null
 ) : ActionExecutor {
     override fun execute(action: String, packageName: String?): Result<Unit> {
-        if (packageName != null && securityManager.isProtectedApp(packageName)) {
-            return Result.failure(IllegalStateException(UstadError.SecurityBlocked.userMessage()))
-        }
-        if (!securityManager.isActionAuthorized(action)) {
-            return Result.failure(IllegalStateException(UstadError.AuthenticationRequired.userMessage()))
+        if (action.isBlank()) return Result.failure(IllegalArgumentException("Action is blank"))
+        if (packageName != null && securityManager.isProtectedApp(packageName)) return Result.failure(IllegalStateException(UstadError.SecurityBlocked.userMessage()))
+        if (!securityManager.isActionAuthorized(action)) return Result.failure(IllegalStateException(UstadError.AuthenticationRequired.userMessage()))
+        val kind = action.substringBefore(":").trim().lowercase()
+        if (appAutomationEngine != null && kind in setOf("open_app", "click", "long_click", "set_text", "scroll_forward", "scroll_backward", "back", "read_visible", "cancel")) {
+            val result = when (kind) {
+                "open_app" -> appAutomationEngine.openApp(action.substringAfter(":").trim())
+                "click" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.FindAndClick(action.substringAfter(":").trim()))))
+                "long_click" -> Result.failure(UnsupportedOperationException("long_click requires an explicit UI step adapter"))
+                "set_text" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.SetText(action.substringAfter(":").trim()))))
+                "scroll_forward" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.Scroll(true))))
+                "scroll_backward" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.Scroll(false))))
+                "back" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.PressBack())))
+                "read_visible" -> appAutomationEngine.execute(com.ustad.personalassistant.appcontrol.AutomationPlan(listOf(com.ustad.personalassistant.appcontrol.AutomationStep.ReadVisibleText())))
+                else -> { appAutomationEngine.cancel(); com.ustad.personalassistant.appcontrol.AutomationEngineResult(AutomationEngineStatus.CANCELLED) }
+            }
+            if (result.status != AutomationEngineStatus.SUCCESS) return Result.failure(IllegalStateException(result.status.name))
         }
         securityManager.audit("authorized action request")
         return Result.success(Unit)
     }
 
-    override fun execute(
-        action: String,
-        packageName: String?,
-        requiredCapabilities: List<Capability>
-    ): Result<Unit> {
-        val engine = capabilityEngine ?: return Result.failure(
-            IllegalStateException(UstadError.CapabilityUnavailable.userMessage())
-        )
+    override fun execute(action: String, packageName: String?, requiredCapabilities: List<Capability>): Result<Unit> {
+        val engine = capabilityEngine ?: return Result.failure(IllegalStateException(UstadError.CapabilityUnavailable.userMessage()))
         val missing = requiredCapabilities.distinct().filterNot(engine::isAvailable)
-        if (missing.isNotEmpty()) {
-            return Result.failure(IllegalStateException(
-                "Required capability unavailable: ${missing.joinToString { it.name }}"
-            ))
-        }
+        if (missing.isNotEmpty()) return Result.failure(IllegalStateException("Required capability unavailable: ${missing.joinToString { it.name }}"))
         return execute(action, packageName)
     }
 }

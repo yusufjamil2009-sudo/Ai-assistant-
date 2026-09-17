@@ -11,6 +11,13 @@ import com.ustad.personalassistant.ai.AiProviderManager
 import com.ustad.personalassistant.ai.AndroidNetworkMonitor
 import com.ustad.personalassistant.ai.CentralAiBrain
 import com.ustad.personalassistant.ai.UnavailableOnDeviceAiProvider
+import com.ustad.personalassistant.appcontrol.AndroidActionVerificationEngine
+import com.ustad.personalassistant.appcontrol.AndroidAppAutomationEngine
+import com.ustad.personalassistant.appcontrol.AndroidAppResolver
+import com.ustad.personalassistant.appcontrol.AppAutomationAdapter
+import com.ustad.personalassistant.appcontrol.GenericAndroidAppAdapter
+import com.ustad.personalassistant.appcontrol.PhotoFilePicker
+import com.ustad.personalassistant.appcontrol.AndroidPhotoFilePicker
 import com.ustad.personalassistant.automation.AutomationPipeline
 import com.ustad.personalassistant.automation.ConfirmationPolicy
 import com.ustad.personalassistant.automation.DefaultConfirmationPolicy
@@ -48,6 +55,9 @@ class UstadApplication : Application() {
     lateinit var securityManager: SecurityManagerImpl; private set
     lateinit var automationPolicy: AutomationPolicy; private set
     lateinit var accessibilityActionEngine: AccessibilityActionEngine; private set
+    lateinit var appResolver: AndroidAppResolver; private set
+    lateinit var appAutomationEngine: AndroidAppAutomationEngine; private set
+    lateinit var photoFilePicker: PhotoFilePicker; private set
     lateinit var gmailService: GmailService; private set
     lateinit var aiProviderManager: AiProviderManager; private set
     lateinit var networkMonitor: AndroidNetworkMonitor; private set
@@ -66,9 +76,21 @@ class UstadApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        permissionManager = AndroidPermissionManager(this); capabilityEngine = DefaultCapabilityEngine(permissionManager); appStateRepository = AppStateRepositoryImpl(permissionManager); settingsRepository = SettingsRepositoryImpl(this); securityManager = SecurityManagerImpl(); automationPolicy = DefaultAutomationPolicy(); accessibilityActionEngine = AndroidAccessibilityActionEngine({ AdvancedAccessibilityService.active }, securityManager)
+        permissionManager = AndroidPermissionManager(this)
+        capabilityEngine = DefaultCapabilityEngine(permissionManager)
+        appStateRepository = AppStateRepositoryImpl(permissionManager)
+        settingsRepository = SettingsRepositoryImpl(this)
+        securityManager = SecurityManagerImpl()
+        automationPolicy = DefaultAutomationPolicy()
+        accessibilityActionEngine = AndroidAccessibilityActionEngine({ AdvancedAccessibilityService.active }, securityManager)
+        appResolver = AndroidAppResolver(this)
+        appAutomationEngine = AndroidAppAutomationEngine(appResolver, accessibilityActionEngine, AndroidActionVerificationEngine(accessibilityActionEngine), capabilityEngine, securityManager, automationPolicy, listOf<AppAutomationAdapter>(GenericAndroidAppAdapter()))
+        photoFilePicker = AndroidPhotoFilePicker()
         val gmailState = SecureGmailAuthStateStore(SecureConfigStore(this, "gmail_auth_state")); gmailService = DefaultGmailService(UnconfiguredGmailRepository(), UnconfiguredGmailAuthManager(gmailState))
-        aiProviderManager = AiProviderManager(this); networkMonitor = AndroidNetworkMonitor(this); val apiManager = aiProviderManager.buildApiManager { networkMonitor.state() }; aiBrain = CentralAiBrain(UnavailableOnDeviceAiProvider(), apiManager) { aiProviderManager.routingPolicy() }; actionExecutor = GuardedActionExecutor(securityManager, capabilityEngine); automationPipeline = AutomationPipeline(capabilityEngine, securityManager, automationPolicy, { action, target -> actionExecutor.execute(action, target) }); confirmationPolicy = DefaultConfirmationPolicy(); aiAutomationOrchestrator = AiAutomationOrchestrator(aiBrain, automationPipeline, confirmationPolicy)
+        aiProviderManager = AiProviderManager(this); networkMonitor = AndroidNetworkMonitor(this); val apiManager = aiProviderManager.buildApiManager { networkMonitor.state() }; aiBrain = CentralAiBrain(UnavailableOnDeviceAiProvider(), apiManager) { aiProviderManager.routingPolicy() }
+        actionExecutor = GuardedActionExecutor(securityManager, capabilityEngine, appAutomationEngine)
+        automationPipeline = AutomationPipeline(capabilityEngine, securityManager, automationPolicy, { action, target -> actionExecutor.execute(action, target) })
+        confirmationPolicy = DefaultConfirmationPolicy(); aiAutomationOrchestrator = AiAutomationOrchestrator(aiBrain, automationPipeline, confirmationPolicy)
         voiceProviderRegistry = VoiceProviderRegistry(this) { networkMonitor.state().name == "ONLINE" }; sttManager = SpeechToTextManager({ voiceProviderRegistry.sttProviders(this) }, { networkMonitor.state().name == "ONLINE" }); ttsManager = TextToSpeechManager({ voiceProviderRegistry.ttsProviders(this) }, { networkMonitor.state().name == "ONLINE" }); voiceEngine = AndroidVoiceEngine(permissionManager, capabilityEngine, sttManager, ttsManager, aiAutomationOrchestrator, settingsRepository)
         voiceAuthenticationEngine = LocalVoiceAuthenticationEngine(this, AndroidVoiceSampleCapture(this)); voiceSessionManager = VoiceSessionManager(this, voiceEngine, voiceAuthenticationEngine, settingsRepository); backgroundAssistantManager = BackgroundAssistantManager(this)
     }
