@@ -1,12 +1,12 @@
 package com.ustad.personalassistant.messaging
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
-import android.Manifest
 import java.util.concurrent.ConcurrentHashMap
 
 abstract class BaseIntentMessagingAdapter(
@@ -48,7 +48,8 @@ class SmsAdapter(private val context: Context) : MessageProvider {
     override fun isAvailable(): Boolean = context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)
     override fun openApp(): Result<Unit> = runCatching {
         val defaultPackage = Telephony.Sms.getDefaultSmsPackage(context)
-        val intent = if (!defaultPackage.isNullOrBlank()) context.packageManager.getLaunchIntentForPackage(defaultPackage) else null
+        val intent = defaultPackage?.takeIf { it.isNotBlank() }
+            ?.let { context.packageManager.getLaunchIntentForPackage(it) }
             ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
