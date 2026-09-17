@@ -11,7 +11,7 @@ class AutomationPipeline(private val capabilityEngine: CapabilityEngine, private
         val start = System.currentTimeMillis()
         fun finish(status: AutomationResultStatus): AutomationResult<Unit> {
             val duration = System.currentTimeMillis() - start
-            logger.log(AutomationLogEntry(System.currentTimeMillis(), action.take(100), targetApp, capabilities.firstOrNull()?.name, status.name, status, duration))
+            logger.log(AutomationLogEntry(System.currentTimeMillis(), sanitizeActionName(action), targetApp, capabilities.firstOrNull()?.name, status.name, status, duration))
             return AutomationResult(status, durationMs = duration)
         }
         if (targetApp != null && (securityManager.isProtectedApp(targetApp) || automationPolicy.decision(targetApp, action) == AutomationDecision.BLOCKED)) return finish(AutomationResultStatus.SECURITY_BLOCKED)
@@ -19,4 +19,5 @@ class AutomationPipeline(private val capabilityEngine: CapabilityEngine, private
         if (!securityManager.isActionAuthorized(action)) return finish(AutomationResultStatus.SECURITY_BLOCKED)
         return actionExecutor(action, targetApp).fold({ finish(AutomationResultStatus.SUCCESS) }, { finish(AutomationResultStatus.ERROR) })
     }
+    private fun sanitizeActionName(action: String): String = action.substringBefore(":").substringBefore("|").trim().take(60).ifBlank { "automation_action" }
 }
