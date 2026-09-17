@@ -3,27 +3,11 @@ package com.ustad.personalassistant.accessibility
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
 import com.ustad.personalassistant.security.SecurityManager
+import com.ustad.personalassistant.services.AdvancedAccessibilityService
 
-interface AccessibilityActionEngine {
-    fun openApp(packageName: String): AccessibilityActionResult<Unit>
-    fun findNode(text: String): AccessibilityActionResult<AccessibilityNodeInfo>
-    fun clickNode(text: String): AccessibilityActionResult<Unit>
-    fun setText(text: String): AccessibilityActionResult<Unit>
-    fun scrollForward(): AccessibilityActionResult<Unit>
-    fun scrollBackward(): AccessibilityActionResult<Unit>
-    fun pressBack(): AccessibilityActionResult<Unit>
-    fun readVisibleText(): AccessibilityActionResult<List<String>>
-    fun findEditableField(): AccessibilityActionResult<AccessibilityNodeInfo>
-    fun findButton(text: String? = null): AccessibilityActionResult<AccessibilityNodeInfo>
-    fun waitForNode(text: String, timeoutMs: Long = 3_000L): AccessibilityActionResult<AccessibilityNodeInfo>
-    fun verifyAction(expectedText: String? = null, timeoutMs: Long = 3_000L): AccessibilityActionResult<Unit>
-    fun snapshot(): AccessibilityActionResult<ScreenSnapshot>
-}
+interface AccessibilityActionEngine { fun openApp(packageName: String): AccessibilityActionResult<Unit>; fun findNode(text: String): AccessibilityActionResult<AccessibilityNodeInfo>; fun clickNode(text: String): AccessibilityActionResult<Unit>; fun setText(text: String): AccessibilityActionResult<Unit>; fun scrollForward(): AccessibilityActionResult<Unit>; fun scrollBackward(): AccessibilityActionResult<Unit>; fun pressBack(): AccessibilityActionResult<Unit>; fun readVisibleText(): AccessibilityActionResult<List<String>>; fun findEditableField(): AccessibilityActionResult<AccessibilityNodeInfo>; fun findButton(text: String? = null): AccessibilityActionResult<AccessibilityNodeInfo>; fun waitForNode(text: String, timeoutMs: Long = 3_000L): AccessibilityActionResult<AccessibilityNodeInfo>; fun verifyAction(expectedText: String? = null, timeoutMs: Long = 3_000L): AccessibilityActionResult<Unit>; fun snapshot(): AccessibilityActionResult<ScreenSnapshot> }
 
-class AndroidAccessibilityActionEngine(
-    private val serviceProvider: () -> AdvancedAccessibilityService?,
-    private val securityManager: SecurityManager
-) : AccessibilityActionEngine {
+class AndroidAccessibilityActionEngine(private val serviceProvider: () -> AdvancedAccessibilityService?, private val securityManager: SecurityManager) : AccessibilityActionEngine {
     override fun openApp(packageName: String) = withService { service -> if (!authorized(packageName)) blocked() else if (service.launchApp(packageName)) success(Unit) else failure(AccessibilityActionStatus.APP_NOT_SUPPORTED) }
     override fun findNode(text: String) = withService { service -> service.nodeByText(text)?.let(::success) ?: failure(AccessibilityActionStatus.NODE_NOT_FOUND) }
     override fun clickNode(text: String) = withService { service -> if (!authorized(service.currentPackageName)) return@withService blocked(); val node = service.nodeByText(text) ?: return@withService failure(AccessibilityActionStatus.NODE_NOT_FOUND); if ((node.isClickable && node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) || (node.parent?.let { p -> p.isClickable && p.performAction(AccessibilityNodeInfo.ACTION_CLICK) } == true)) success(Unit) else failure(AccessibilityActionStatus.ACTION_NOT_SUPPORTED) }
