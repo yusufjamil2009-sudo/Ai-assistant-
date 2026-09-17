@@ -14,9 +14,11 @@ class AutomationPipeline(private val capabilityEngine: CapabilityEngine, private
             logger.log(AutomationLogEntry(System.currentTimeMillis(), sanitizeActionName(action), targetApp, capabilities.firstOrNull()?.name, status.name, status, duration))
             return AutomationResult(status, durationMs = duration)
         }
-        if (targetApp != null && (securityManager.isProtectedApp(targetApp) || automationPolicy.decision(targetApp, action) == AutomationDecision.BLOCKED)) return finish(AutomationResultStatus.SECURITY_BLOCKED)
+        // Fixed order: Capability -> Security -> Protected App -> Permission/availability -> Execute -> Result.
         if (capabilities.any { !capabilityEngine.isAvailable(it) }) return finish(AutomationResultStatus.PERMISSION_REQUIRED)
         if (!securityManager.isActionAuthorized(action)) return finish(AutomationResultStatus.SECURITY_BLOCKED)
+        if (targetApp != null && securityManager.isProtectedApp(targetApp)) return finish(AutomationResultStatus.SECURITY_BLOCKED)
+        if (targetApp != null && automationPolicy.decision(targetApp, action) == AutomationDecision.BLOCKED) return finish(AutomationResultStatus.SECURITY_BLOCKED)
         return actionExecutor(action, targetApp).fold({ finish(AutomationResultStatus.SUCCESS) }, { finish(AutomationResultStatus.ERROR) })
     }
     private fun sanitizeActionName(action: String): String = action.substringBefore(":").substringBefore("|").trim().take(60).ifBlank { "automation_action" }
