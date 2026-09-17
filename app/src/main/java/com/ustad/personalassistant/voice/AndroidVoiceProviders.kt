@@ -15,11 +15,10 @@ import android.speech.tts.UtteranceProgressListener
 import java.util.Locale
 import java.util.UUID
 
-class AndroidLocalSpeechProvider(private val context: Context) : SpeechToTextProvider {
+class AndroidLocalSpeechProvider(private val context: Context, private val networkAvailable: () -> Boolean = { true }) : SpeechToTextProvider {
     override val config = SpeechToTextConfig("android_local", "Android / Local", enabled = true, priority = 99, offlineSupport = true, streamingSupport = true)
     private var recognizer: SpeechRecognizer? = null
     private var activeListener: ((SttEvent) -> Unit)? = null
-    private var selectedLanguage = VoiceLanguage.HINGLISH
 
     override fun isAvailable(): Boolean = SpeechRecognizer.isRecognitionAvailable(context)
     override fun healthCheck(): VoiceProviderHealth = if (isAvailable()) VoiceProviderHealth(VoiceProviderStatus.HEALTHY) else VoiceProviderHealth(VoiceProviderStatus.UNAVAILABLE)
@@ -27,7 +26,6 @@ class AndroidLocalSpeechProvider(private val context: Context) : SpeechToTextPro
     override fun start(language: VoiceLanguage, listener: (SttEvent) -> Unit): Result<Unit> {
         if (!isAvailable()) return Result.failure(VoiceException(VoiceErrorCode.MICROPHONE_UNAVAILABLE, "Speech recognition is not available on this device."))
         if (recognizer != null) stop().getOrNull()
-        selectedLanguage = language
         activeListener = listener
         recognizer = SpeechRecognizer.createSpeechRecognizer(context).also { sr ->
             sr.setRecognitionListener(object : RecognitionListener {
@@ -41,13 +39,14 @@ class AndroidLocalSpeechProvider(private val context: Context) : SpeechToTextPro
                 override fun onError(error: Int) { activeListener?.invoke(SttEvent(SttEventType.ERROR, error = VoiceError(mapError(error), "Speech recognition stopped: ${errorMessage(error)}"))); release() }
                 override fun onEvent(eventType: Int, params: Bundle?) = Unit
             })
+            val locale = localeFor(language)
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, localeFor(language).toLanguageTag())
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, localeFor(language).toLanguageTag())
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE, locale.toLanguageTag())
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, locale.toLanguageTag())
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
-                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+                putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, !networkAvailable())
             }
             sr.startListening(intent)
         }
@@ -59,11 +58,10 @@ class AndroidLocalSpeechProvider(private val context: Context) : SpeechToTextPro
         if (text.isBlank()) return
         activeListener?.invoke(SttEvent(if (final) SttEventType.FINAL else SttEventType.PARTIAL, SttResult(text, VoiceLanguageDetector().detect(text), null, config.providerId, final)))
     }
-
     override fun streamAudio(audio: ByteArray): Result<Unit> = Result.success(Unit)
     override fun stop(): Result<SttResult?> { recognizer?.stopListening(); release(); return Result.success(null) }
     private fun release() { recognizer?.cancel(); recognizer?.destroy(); recognizer = null; activeListener = null }
-    private fun localeFor(language: VoiceLanguage) = when (language) { VoiceLanguage.HINDI, VoiceLanguage.HINGLISH, VoiceLanguage.MIXED -> Locale("hi", "IN"); VoiceLanguage.ENGLISH -> Locale.ENGLISH; VoiceLanguage.UNKNOWN -> Locale("hi", "IN") }
+    private fun localeFor(language: VoiceLanguage) = when (language) { VoiceLanguage.ENGLISH -> Locale.ENGLISH; else -> Locale("hi", "IN") }
     private fun mapError(error: Int) = when (error) { SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> VoiceErrorCode.STT_NETWORK_ERROR; SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> VoiceErrorCode.STT_PROVIDER_UNAVAILABLE; SpeechRecognizer.ERROR_SPEECH_TIMEOUT, SpeechRecognizer.ERROR_NO_MATCH -> VoiceErrorCode.STT_TIMEOUT; else -> VoiceErrorCode.STT_INVALID_RESPONSE }
     private fun errorMessage(error: Int) = when (error) { SpeechRecognizer.ERROR_AUDIO -> "Audio capture error"; SpeechRecognizer.ERROR_NETWORK -> "Network error"; SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Network timeout"; SpeechRecognizer.ERROR_NO_MATCH -> "No speech match"; SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Speech timeout"; else -> "Recognition error" }
 }
@@ -74,6 +72,7 @@ class AndroidTextToSpeechProvider(private val context: Context) : TextToSpeechPr
     private var ready = false
     private var audioManager: AudioManager? = null
     private var focusRequest: AudioFocusRequest? = null
+    private var completion: ((Result<Unit>) -> Unit)? = null
 
     init { initialize() }
     private fun initialize() {
@@ -91,9 +90,8 @@ class AndroidTextToSpeechProvider(private val context: Context) : TextToSpeechPr
         val utteranceId = UUID.randomUUID().toString()
         completion = onComplete
         val status = tts?.speak(text, TextToSpeech.QUEUE_FLUSH, Bundle(), utteranceId) ?: TextToSpeech.ERROR
-        if (status == TextToSpeech.ERROR) { releaseFocus(); onComplete(Result.failure(VoiceException(VoiceErrorCode.TTS_INVALID_RESPONSE, "Android text-to-speech could not start."))) }
+        if (status == TextToSpeech.ERROR) { releaseFocus(); completion = null; onComplete(Result.failure(VoiceException(VoiceErrorCode.TTS_INVALID_RESPONSE, "Android text-to-speech could not start."))) }
     }
-    private var completion: ((Result<Unit>) -> Unit)? = null
     private val progressListener = object : UtteranceProgressListener() {
         override fun onStart(utteranceId: String?) = Unit
         override fun onDone(utteranceId: String?) { releaseFocus(); completion?.invoke(Result.success(Unit)); completion = null }
@@ -102,6 +100,7 @@ class AndroidTextToSpeechProvider(private val context: Context) : TextToSpeechPr
     override fun stop(): Result<Unit> { tts?.stop(); completion = null; releaseFocus(); return Result.success(Unit) }
     fun availableLocales(): List<Locale> = tts?.availableLanguages?.toList().orEmpty()
     fun availableVoices(): List<String> = tts?.voices?.mapNotNull { it.name }?.sorted().orEmpty()
+    fun shutdown() { stop(); tts?.shutdown(); tts = null; ready = false }
     private fun requestFocus() {
         val am = audioManager ?: return
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
