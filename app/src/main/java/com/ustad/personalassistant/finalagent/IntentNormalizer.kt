@@ -6,17 +6,15 @@ object IntentNormalizer {
         var value = input.trim().replace(Regex("\\s+"), " ")
         if (value.isBlank()) return value
         val replacements = listOf(
-            Regex("(?i)\\bwhatsapp kholo\\b") to "open whatsapp",
-            Regex("(?i)\\bwhatsapp open karo\\b") to "open whatsapp",
-            Regex("(?i)\\bwhatsapp khol do\\b") to "open whatsapp",
-            Regex("(?i)\\bbattery (kitni|kitna) hai\\b") to "battery status",
-            Regex("(?i)\\bbattery status batao\\b") to "battery status",
-            Regex("(?i)\\bphone battery check karo\\b") to "battery status",
-            Regex("(?i)\\bstorage (kitni|kitna) hai\\b") to "storage status",
-            Regex("(?i)\\bstorage check karo\\b") to "storage status",
-            Regex("(?i)\\bphone check karo\\b") to "phone diagnostics",
-            Regex("(?i)\\bphone diagnostics karo\\b") to "phone diagnostics",
-            Regex("(?i)\\binternet check karo\\b") to "network status"
+            Regex("(?i)\\bwhatsapp\\s+(?:kholo|khol\\s+do|open\\s+karo)\\b[?.!]*") to "open whatsapp",
+            Regex("(?i)\\bbattery\\s+(?:kitni|kitna)\\s+hai\\b[?.!]*") to "battery status",
+            Regex("(?i)\\bbattery\\s+status\\s+batao\\b[?.!]*") to "battery status",
+            Regex("(?i)\\bphone\\s+battery\\s+check\\s+karo\\b[?.!]*") to "battery status",
+            Regex("(?i)\\bstorage\\s+(?:kitni|kitna)\\s+hai\\b[?.!]*") to "storage status",
+            Regex("(?i)\\bstorage\\s+check\\s+karo\\b[?.!]*") to "storage status",
+            Regex("(?i)\\bphone\\s+check\\s+karo\\b[?.!]*") to "phone diagnostics",
+            Regex("(?i)\\bphone\\s+diagnostics\\s+karo\\b[?.!]*") to "phone diagnostics",
+            Regex("(?i)\\binternet\\s+check\\s+karo\\b[?.!]*") to "network status"
         )
         replacements.forEach { (pattern, replacement) -> value = pattern.replace(value, replacement) }
         return value
