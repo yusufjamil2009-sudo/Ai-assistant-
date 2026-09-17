@@ -15,9 +15,10 @@ data class AppState(
     val cameraPermission: CapabilityStatus = CapabilityStatus.OFF,
     val locationPermission: CapabilityStatus = CapabilityStatus.OFF,
     val filesCapability: CapabilityStatus = CapabilityStatus.ON,
+    val openAppsCapability: CapabilityStatus = CapabilityStatus.ON,
     val backgroundAssistantStatus: CapabilityStatus = CapabilityStatus.NOT_AVAILABLE,
-    val gmailConnection: CapabilityStatus = CapabilityStatus.CONNECT,
-    val googleAccountConnection: CapabilityStatus = CapabilityStatus.CONNECT
+    val gmailConnection: CapabilityStatus = CapabilityStatus.NOT_AVAILABLE,
+    val googleAccountConnection: CapabilityStatus = CapabilityStatus.NOT_AVAILABLE
 )
 
 data class CapabilityInfo(
