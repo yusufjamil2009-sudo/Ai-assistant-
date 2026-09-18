@@ -1,5 +1,6 @@
 package com.ustad.personalassistant.background
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -35,6 +36,11 @@ class BackgroundAssistantManager(private val context: Context) {
             _state.value = BackgroundAssistantState.MIC_PERMISSION_REQUIRED
             return Result.failure(IllegalStateException("Microphone permission required"))
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            _state.value = BackgroundAssistantState.NOTIFICATION_PERMISSION_REQUIRED
+            return Result.failure(IllegalStateException("Notification permission required for visible background assistant"))
+        }
         _state.value = BackgroundAssistantState.STARTING
         return runCatching { ContextCompat.startForegroundService(context, Intent(context, BackgroundAssistantService::class.java)) }
             .onFailure { _state.value = BackgroundAssistantState.ERROR }
@@ -42,7 +48,7 @@ class BackgroundAssistantManager(private val context: Context) {
     fun updateState(state: BackgroundAssistantState) { _state.value = state }
 }
 
-enum class BackgroundAssistantState { DISABLED, STARTING, ACTIVE, PAUSED, MIC_PERMISSION_REQUIRED, BATTERY_RESTRICTION, WAKE_ENGINE_UNAVAILABLE, ERROR }
+enum class BackgroundAssistantState { DISABLED, STARTING, ACTIVE, PAUSED, MIC_PERMISSION_REQUIRED, NOTIFICATION_PERMISSION_REQUIRED, BATTERY_RESTRICTION, WAKE_ENGINE_UNAVAILABLE, ERROR }
 
 class BackgroundAssistantService : Service() {
     private val channelId = "ustad_background_assistant"
@@ -50,6 +56,12 @@ class BackgroundAssistantService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            (application as? UstadApplication)?.backgroundAssistantManager?.updateState(BackgroundAssistantState.NOTIFICATION_PERMISSION_REQUIRED)
+            stopSelf()
+            return
+        }
         createChannel()
         val notification = NotificationCompat.Builder(this, channelId)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
