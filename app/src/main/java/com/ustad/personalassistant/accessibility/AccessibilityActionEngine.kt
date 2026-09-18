@@ -2,6 +2,7 @@ package com.ustad.personalassistant.accessibility
 
 import android.os.Bundle
 import android.view.accessibility.AccessibilityNodeInfo
+import android.os.Looper
 import com.ustad.personalassistant.security.SecurityManager
 import com.ustad.personalassistant.services.AdvancedAccessibilityService
 
@@ -51,8 +52,8 @@ class AndroidAccessibilityActionEngine(private val serviceProvider: () -> Advanc
     override fun readVisibleText() = withService { service -> if (!authorized(service.currentPackageName)) blocked() else success(service.visibleText()) }
     override fun findEditableField() = withAuthorizedService { service -> service.focusedEditable()?.let(::success) ?: service.firstEditable()?.let(::success) ?: failure(AccessibilityActionStatus.NODE_NOT_FOUND) }
     override fun findButton(text: String?) = withAuthorizedService { service -> service.button(text)?.let(::success) ?: failure(AccessibilityActionStatus.NODE_NOT_FOUND) }
-    override fun waitForNode(text: String, timeoutMs: Long): AccessibilityActionResult<AccessibilityNodeInfo> { begin(); val end = System.currentTimeMillis() + timeoutMs.coerceIn(0L, 10_000L); while (!cancelled && System.currentTimeMillis() <= end) { val result = findNode(text); if (result.isSuccess) return result; Thread.sleep(100L) }; return if (cancelled) failure(AccessibilityActionStatus.ERROR) else failure(AccessibilityActionStatus.TIMEOUT) }
-    override fun waitForWindow(packageName: String, timeoutMs: Long): AccessibilityActionResult<Unit> { begin(); val end = System.currentTimeMillis() + timeoutMs.coerceIn(0L, 10_000L); while (!cancelled && System.currentTimeMillis() <= end) { val service = serviceProvider(); if (service?.currentPackageName == packageName) return success(Unit); Thread.sleep(100L) }; return if (cancelled) failure(AccessibilityActionStatus.ERROR) else failure(AccessibilityActionStatus.TIMEOUT) }
+    override fun waitForNode(text: String, timeoutMs: Long): AccessibilityActionResult<AccessibilityNodeInfo> { begin(); if (Looper.myLooper() == Looper.getMainLooper()) return findNode(text); val end = System.currentTimeMillis() + timeoutMs.coerceIn(0L, 10_000L); while (!cancelled && System.currentTimeMillis() <= end) { val result = findNode(text); if (result.isSuccess) return result; try { Thread.sleep(100L) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); return failure(AccessibilityActionStatus.TIMEOUT) } }; return if (cancelled) failure(AccessibilityActionStatus.ERROR) else failure(AccessibilityActionStatus.TIMEOUT) }
+    override fun waitForWindow(packageName: String, timeoutMs: Long): AccessibilityActionResult<Unit> { begin(); if (Looper.myLooper() == Looper.getMainLooper()) return if (serviceProvider()?.currentPackageName == packageName) success(Unit) else failure(AccessibilityActionStatus.TIMEOUT); val end = System.currentTimeMillis() + timeoutMs.coerceIn(0L, 10_000L); while (!cancelled && System.currentTimeMillis() <= end) { val service = serviceProvider(); if (service?.currentPackageName == packageName) return success(Unit); try { Thread.sleep(100L) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); return failure(AccessibilityActionStatus.TIMEOUT) } }; return if (cancelled) failure(AccessibilityActionStatus.ERROR) else failure(AccessibilityActionStatus.TIMEOUT) }
     override fun verifyAction(expectedText: String?, timeoutMs: Long) = if (expectedText == null) success(Unit) else if (waitForNode(expectedText, timeoutMs).isSuccess) success(Unit) else failure(AccessibilityActionStatus.VERIFICATION_FAILED)
     override fun snapshot() = withAuthorizedService { service -> success(service.snapshot()) }
     override fun currentPackageName(): String? = serviceProvider()?.currentPackageName
