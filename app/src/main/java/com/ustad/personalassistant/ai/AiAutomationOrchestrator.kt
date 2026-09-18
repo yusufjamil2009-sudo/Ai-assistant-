@@ -10,6 +10,8 @@ import com.ustad.personalassistant.finalagent.AgentOrchestrator
 import com.ustad.personalassistant.finalagent.AssistantSessionContext
 import com.ustad.personalassistant.finalagent.AssistantSessionType
 import com.ustad.personalassistant.finalagent.FinalResultStatus
+import com.ustad.personalassistant.security.SecurityContext
+import com.ustad.personalassistant.security.SecuritySessionType
 import java.util.UUID
 
 class AiAutomationOrchestrator(
@@ -82,6 +84,6 @@ class AiAutomationOrchestrator(
         if (plan == null || !response.requiresConfirmation && confirmationPolicy.decision(plan.action) == ConfirmationDecision.CONFIRM_BEFORE_SEND) {
             return AutomationResult(AutomationResultStatus.SECURITY_BLOCKED, message = "Explicit confirmation required")
         }
-        return pipeline.execute(plan.action, plan.target, plan.requiredCapabilities)
+        return pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(authenticated = true, confirmed = true, deviceUnlocked = true, sessionType = SecuritySessionType.OWNER, targetApp = plan.target))
     }
 }
