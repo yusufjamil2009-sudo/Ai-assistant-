@@ -124,9 +124,12 @@ class AndroidAppAutomationEngine(
     private fun preflight(packageName: String?, action: String): Boolean {
         if (!capabilityEngine.isAvailable(Capability.APP_CONTROL)) return false
         if (!securityManager.isActionAuthorized(action)) return false
-        if (packageName != null && securityManager.isProtectedApp(packageName)) return false
-        if (packageName != null && policy.decision(packageName, action) == com.ustad.personalassistant.accessibility.AutomationDecision.BLOCKED) return false
-        return packageName == null || adapters.any { it.supports(packageName) }
+        val actualPackage = packageName ?: accessibility.currentPackageName() ?: return false
+        if (securityManager.isProtectedApp(actualPackage)) return false
+        if (!accessibility.currentTargetAllowed()) return false
+        if (policy.decision(actualPackage, action) == com.ustad.personalassistant.accessibility.AutomationDecision.BLOCKED) return false
+        if (!adapters.any { it.supports(actualPackage) }) return false
+        return packageName == null || packageName == actualPackage
     }
 
     private fun <T> map(status: AccessibilityActionStatus): AutomationEngineResult<T> = AutomationEngineResult(
