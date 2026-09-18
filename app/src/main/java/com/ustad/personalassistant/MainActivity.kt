@@ -104,7 +104,9 @@ private fun HomeScreen(state: AppState, app: UstadApplication, activity: MainAct
                     enabled = activity != null,
                     onClick = {
                         val a = activity ?: return@Button
-                        if (backgroundEnabled) {
+                        if (backgroundEnabled &&
+                            app.permissionManager.verifyPermission(Capability.MICROPHONE) == CapabilityStatus.ON
+                        ) {
                             app.backgroundAssistantManager.setEnabled(false)
                         } else {
                             runBlocking { app.settingsRepository.setBackgroundAssistantEnabled(true) }
