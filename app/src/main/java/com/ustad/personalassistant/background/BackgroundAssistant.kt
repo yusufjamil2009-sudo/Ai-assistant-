@@ -35,8 +35,15 @@ class BackgroundAssistantManager(private val context: Context) {
             return Result.failure(IllegalStateException("Microphone permission required"))
         }
         _state.value = BackgroundAssistantState.STARTING
-        return runCatching { ContextCompat.startForegroundService(context, Intent(context, BackgroundAssistantService::class.java)) }
-            .onFailure { _state.value = BackgroundAssistantState.ERROR }
+        return runCatching {
+            ContextCompat.startForegroundService(context, Intent(context, BackgroundAssistantService::class.java))
+            // Keep the persisted setting in sync with the service request so the UI and
+            // process-restart behavior do not immediately revert to OFF.
+            app.settingsRepository.setBackgroundAssistantEnabledBlocking(true)
+        }.onFailure {
+            _state.value = BackgroundAssistantState.ERROR
+            app.settingsRepository.setBackgroundAssistantEnabledBlocking(false)
+        }
     }
     fun updateState(state: BackgroundAssistantState) { _state.value = state }
 }
@@ -55,14 +62,25 @@ class BackgroundAssistantService : Service() {
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
-        try { startForeground(4105, notification) } catch (_: SecurityException) { stopSelf(); return }
         val app = application as UstadApplication
         val manager = app.backgroundAssistantManager
+        try {
+            startForeground(4105, notification)
+        } catch (_: SecurityException) {
+            manager.updateState(BackgroundAssistantState.ERROR)
+            app.settingsRepository.setBackgroundAssistantEnabledBlocking(false)
+            stopSelf()
+            return
+        }
         if (app.permissionManager.verifyPermission(Capability.MICROPHONE) != CapabilityStatus.ON) {
-            manager.updateState(BackgroundAssistantState.MIC_PERMISSION_REQUIRED); stopSelf(); return
+            manager.updateState(BackgroundAssistantState.MIC_PERMISSION_REQUIRED)
+            app.settingsRepository.setBackgroundAssistantEnabledBlocking(false)
+            stopSelf()
+            return
         }
         if (!app.voiceSessionManager.isWakeWordAvailable(this)) {
             manager.updateState(BackgroundAssistantState.WAKE_ENGINE_UNAVAILABLE)
+            app.settingsRepository.setBackgroundAssistantEnabledBlocking(false)
             stopSelf()
             return
         }
