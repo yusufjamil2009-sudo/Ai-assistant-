@@ -91,6 +91,11 @@ class BackgroundAssistantService : Service() {
         }
     }
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val app = application as? UstadApplication
+        if (app == null || !app.settingsRepository.isBackgroundAssistantEnabledBlocking()) {
+            stopSelfResult(startId)
+            return START_NOT_STICKY
+        }
         return START_STICKY
     }
 

@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore by preferencesDataStore(name = "ustad_settings")
@@ -18,6 +19,7 @@ interface SettingsRepository {
     suspend fun setAssistantEnabled(enabled: Boolean); suspend fun setDisplayName(name: String); suspend fun setVoiceLanguage(value: String); suspend fun setPreferredSttProvider(value: String); suspend fun setPreferredTtsProvider(value: String); suspend fun setVoiceName(value: String); suspend fun setSpeechSpeed(value: Float); suspend fun setSpeechPitch(value: Float); suspend fun setAutoSpeak(value: Boolean); suspend fun setBackgroundAssistantEnabled(enabled: Boolean); suspend fun setWakeWordEnabled(enabled: Boolean); suspend fun setWakePhrase(value: String); suspend fun setVoiceAuthenticationEnabled(enabled: Boolean)
     suspend fun setCallAssistantEnabled(enabled: Boolean); suspend fun setCallAssistantTimeoutSeconds(value: Int); suspend fun setCallAssistantGreeting(enabled: Boolean); suspend fun setCallAssistantPostCallSummary(enabled: Boolean)
     fun setBackgroundAssistantEnabledBlocking(enabled: Boolean)
+    fun isBackgroundAssistantEnabledBlocking(): Boolean
 }
 
 class SettingsRepositoryImpl(private val context: Context) : SettingsRepository {
@@ -29,4 +31,5 @@ class SettingsRepositoryImpl(private val context: Context) : SettingsRepository 
     override suspend fun setAssistantEnabled(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.assistantEnabled] = enabled } }; override suspend fun setDisplayName(name: String) { context.settingsDataStore.edit { it[Keys.displayName] = name.trim().take(80) } }; override suspend fun setVoiceLanguage(value: String) { context.settingsDataStore.edit { it[Keys.voiceLanguage] = value } }; override suspend fun setPreferredSttProvider(value: String) { context.settingsDataStore.edit { it[Keys.preferredSttProvider] = value } }; override suspend fun setPreferredTtsProvider(value: String) { context.settingsDataStore.edit { it[Keys.preferredTtsProvider] = value } }; override suspend fun setVoiceName(value: String) { context.settingsDataStore.edit { it[Keys.voiceName] = value.take(120) } }; override suspend fun setSpeechSpeed(value: Float) { context.settingsDataStore.edit { it[Keys.speechSpeed] = value.coerceIn(0.5f, 2.0f) } }; override suspend fun setSpeechPitch(value: Float) { context.settingsDataStore.edit { it[Keys.speechPitch] = value.coerceIn(0.5f, 2.0f) } }; override suspend fun setAutoSpeak(value: Boolean) { context.settingsDataStore.edit { it[Keys.autoSpeak] = value } }; override suspend fun setBackgroundAssistantEnabled(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.backgroundAssistantEnabled] = enabled } }; override suspend fun setWakeWordEnabled(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.wakeWordEnabled] = enabled } }; override suspend fun setWakePhrase(value: String) { context.settingsDataStore.edit { it[Keys.wakePhrase] = value.trim().take(80).ifBlank { "Hello Assistant" } } }; override suspend fun setVoiceAuthenticationEnabled(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.voiceAuthenticationEnabled] = enabled } }
     override suspend fun setCallAssistantEnabled(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.callAssistantEnabled] = enabled } }; override suspend fun setCallAssistantTimeoutSeconds(value: Int) { context.settingsDataStore.edit { it[Keys.callAssistantTimeoutSeconds] = value.coerceIn(5, 120) } }; override suspend fun setCallAssistantGreeting(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.callAssistantGreeting] = enabled } }; override suspend fun setCallAssistantPostCallSummary(enabled: Boolean) { context.settingsDataStore.edit { it[Keys.callAssistantPostCallSummary] = enabled } }
     override fun setBackgroundAssistantEnabledBlocking(enabled: Boolean) { kotlinx.coroutines.runBlocking { setBackgroundAssistantEnabled(enabled) } }
+    override fun isBackgroundAssistantEnabledBlocking(): Boolean = kotlinx.coroutines.runBlocking { backgroundAssistantEnabled.first() }
 }
