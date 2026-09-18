@@ -20,15 +20,34 @@ enum class SecurityDecision {
 
 enum class SecuritySessionType { OWNER, CALL_CONVERSATION }
 
+data class SecurityContext(
+    val authenticated: Boolean,
+    val confirmed: Boolean,
+    val deviceUnlocked: Boolean,
+    val sessionType: SecuritySessionType,
+    val targetApp: String?
+)
+
 data class SecurityRequest(
     val action: String,
     val targetApp: String? = null,
     val sessionType: SecuritySessionType = SecuritySessionType.OWNER,
-    val authenticated: Boolean = true,
+    val authenticated: Boolean = false,
     val confirmed: Boolean = false,
-    val capabilityAvailable: Boolean = true,
-    val deviceUnlocked: Boolean = true
+    val capabilityAvailable: Boolean = false,
+    val deviceUnlocked: Boolean = false
 )
+
+fun SecurityContext.toRequest(action: String, capabilityAvailable: Boolean): SecurityRequest =
+    SecurityRequest(
+        action = action,
+        targetApp = targetApp,
+        sessionType = sessionType,
+        authenticated = authenticated,
+        confirmed = confirmed,
+        capabilityAvailable = capabilityAvailable,
+        deviceUnlocked = deviceUnlocked
+    )
 
 data class SecurityAuditEvent(
     val timestamp: Long,
