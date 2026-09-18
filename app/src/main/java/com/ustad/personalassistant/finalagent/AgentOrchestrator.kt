@@ -13,6 +13,7 @@ import com.ustad.personalassistant.security.SecurityDecision
 import com.ustad.personalassistant.security.SecurityFirewall
 import com.ustad.personalassistant.security.SecurityRequest
 import com.ustad.personalassistant.security.SecuritySessionType
+import com.ustad.personalassistant.security.SecurityContext
 import java.util.UUID
 
 /** Final single entry point for text/voice-driven orchestration. Existing engines remain the executors. */
@@ -84,7 +85,7 @@ class AgentOrchestrator(
 
         registry.putPending(requestId)
         if (!registry.beginExecution(requestId)) return FinalAgentResult(FinalResultStatus.DUPLICATE_REQUEST, response, "Request is no longer executable", requestId)
-        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER)
+        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(session.authenticated, confirmed || !requiresConfirmation, session.deviceUnlocked, SecuritySessionType.OWNER, plan.target))
         registry.complete(requestId)
         return FinalAgentResult(mapAutomationStatus(automation.status), response, automation.message, requestId)
     }
@@ -114,7 +115,7 @@ class AgentOrchestrator(
             registry.cancel(requestId)
             return FinalAgentResult(mapSecurityDecision(decision) ?: FinalResultStatus.SECURITY_BLOCKED, response, decision.name, requestId)
         }
-        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER)
+        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(true, true, session.deviceUnlocked, SecuritySessionType.OWNER, plan.target))
         registry.complete(requestId)
         return FinalAgentResult(mapAutomationStatus(automation.status), response, automation.message, requestId)
     }
