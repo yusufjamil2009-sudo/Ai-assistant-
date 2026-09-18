@@ -39,7 +39,18 @@ class VoiceSessionManager(private val context: Context, private val voiceEngine:
     }
     private fun authenticateThenListen() {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
-        if (!runBlockingSettings { settings.voiceAuthenticationEnabled }) { state = VoiceSessionManagerState.IDLE; voiceEngine.speak("Voice authentication is required for background control."); return }
+        if (!runBlockingSettings { settings.voiceAuthenticationEnabled }) {
+            state = VoiceSessionManagerState.COMMAND_LISTENING
+            startCommandTimeout()
+            voiceEngine.startListeningFromBackground { event ->
+                if (event.type == SttEventType.FINAL) {
+                    state = VoiceSessionManagerState.RESPONDING
+                    cancelTimeout()
+                }
+                if (event.type == SttEventType.ERROR) state = VoiceSessionManagerState.ERROR
+            }
+            return
+        }
         state = VoiceSessionManagerState.AUTHENTICATING
         val attempt = authentication.authenticate().getOrElse { state = VoiceSessionManagerState.ERROR; return }
         if (!VoiceAuthenticationPolicy.mayEnterControlPipeline(sessionType, attempt.result)) {
