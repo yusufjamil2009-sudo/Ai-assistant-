@@ -44,7 +44,7 @@ class AgentOrchestrator(
         val response = brain.processRequest(request).getOrElse {
             return FinalAgentResult(FinalResultStatus.AI_SERVICE_UNAVAILABLE, message = it.message)
         }
-        val plan = response.actionPlan ?: return FinalAgentResult(FinalResultStatus.CHAT_RESPONSE, response = response)
+        val plan = response.actionPlan ?: return FinalAgentResult(FinalResultStatus.CHAT_RESPONSE, response = response.copy(requestId = requestId), requestId = requestId)
         if (plan.action.isBlank()) return FinalAgentResult(FinalResultStatus.ERROR, message = "Invalid action plan")
 
         val requestId = UUID.randomUUID().toString()
@@ -62,7 +62,7 @@ class AgentOrchestrator(
         }
         if (requiresConfirmation && !confirmed) {
             registry.putPending(requestId)
-            return FinalAgentResult(FinalResultStatus.CONFIRMATION_REQUIRED, response, "Explicit owner confirmation required", requestId)
+            return FinalAgentResult(FinalResultStatus.CONFIRMATION_REQUIRED, response.copy(requestId = requestId), "Explicit owner confirmation required", requestId)
         }
         if (!capabilityEngine.areAvailable(plan.requiredCapabilities)) {
             return FinalAgentResult(FinalResultStatus.CAPABILITY_REQUIRED, response, "Required capability unavailable", requestId)
