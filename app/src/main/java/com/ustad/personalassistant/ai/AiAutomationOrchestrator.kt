@@ -36,8 +36,8 @@ class AiAutomationOrchestrator(
                 is com.ustad.personalassistant.finalagent.FinalAgentResult ->
                     when (result.status) {
                         FinalResultStatus.SUCCESS,
-                        FinalResultStatus.CHAT_RESPONSE -> Result.success(result.response ?: AiResponse(result.message.orEmpty()))
-                        FinalResultStatus.CONFIRMATION_REQUIRED -> Result.success((result.response ?: AiResponse(result.message.orEmpty())).copy(requiresConfirmation = true))
+                        FinalResultStatus.CHAT_RESPONSE -> Result.success((result.response ?: AiResponse(result.message.orEmpty())).copy(requestId = result.requestId))
+                        FinalResultStatus.CONFIRMATION_REQUIRED -> Result.success((result.response ?: AiResponse(result.message.orEmpty())).copy(requiresConfirmation = true, requestId = result.requestId))
                         else -> Result.failure(AiException(AiErrorCode.SECURITY_BLOCKED))
                     }
             }
@@ -65,7 +65,7 @@ class AiAutomationOrchestrator(
                     authenticated = true,
                     voiceAuthenticated = true
                 ),
-                response.actionPlan?.action ?: UUID.randomUUID().toString()
+                response.requestId ?: return AutomationResult(AutomationResultStatus.SECURITY_BLOCKED, message = "Confirmation context expired")
             )
             return when (result.status) {
                 FinalResultStatus.SUCCESS -> AutomationResult(AutomationResultStatus.SUCCESS, message = result.message)
