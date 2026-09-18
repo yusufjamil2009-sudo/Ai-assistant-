@@ -15,6 +15,12 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -68,19 +74,79 @@ private fun ProviderEditorDialog(manager: AiProviderManager, initial: ProviderCo
     var priority by remember(initial.providerId) { mutableStateOf(initial.priority.toString()) }
     var timeout by remember(initial.providerId) { mutableStateOf(initial.timeoutMs.toString()) }
     var retries by remember(initial.providerId) { mutableStateOf(initial.retryCount.toString()) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Configure ${initial.displayName}") }, text = {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedTextField(model, { model = it }, label = { Text("Model") }, singleLine = true)
-            OutlinedTextField(endpoint, { endpoint = it }, label = { Text("Endpoint") }, singleLine = true)
-            OutlinedTextField(key, { key = it }, label = { Text("API key (leave blank to keep existing)") }, singleLine = true)
-            OutlinedTextField(priority, { priority = it.filter(Char::isDigit) }, label = { Text("Priority") }, singleLine = true)
-            OutlinedTextField(timeout, { timeout = it.filter(Char::isDigit) }, label = { Text("Timeout ms") }, singleLine = true)
-            OutlinedTextField(retries, { retries = it.filter(Char::isDigit) }, label = { Text("Retries 0–3") }, singleLine = true)
+    var testing by remember(initial.providerId) { mutableStateOf(false) }
+    var resultText by remember(initial.providerId) { mutableStateOf<String?>(null) }
+    var resultOk by remember(initial.providerId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    fun currentConfig() = initial.copy(
+        model = model.trim(),
+        endpoint = endpoint.trim().ifBlank { null },
+        priority = priority.toIntOrNull() ?: initial.priority,
+        timeoutMs = timeout.toLongOrNull() ?: initial.timeoutMs,
+        retryCount = retries.toIntOrNull() ?: initial.retryCount
+    )
+
+    fun test(saveAfterSuccess: Boolean) {
+        val config = currentConfig()
+        val candidateKey = key.trim().takeIf { it.isNotBlank() }
+        testing = true
+        resultText = "Testing live API connection…"
+        resultOk = false
+        scope.launch {
+            val result = withContext(Dispatchers.IO) {
+                manager.testProvider(config.providerId, candidateKey)
+            }
+            testing = false
+            resultOk = result.success
+            resultText = result.message
+            if (result.success && saveAfterSuccess) {
+                manager.save(config, candidateKey)
+                onSaved()
+            }
         }
-    }, confirmButton = {
-        Button(onClick = {
-            manager.save(initial.copy(model = model.trim(), endpoint = endpoint.trim().ifBlank { null }, priority = priority.toIntOrNull() ?: initial.priority, timeoutMs = timeout.toLongOrNull() ?: initial.timeoutMs, retryCount = retries.toIntOrNull() ?: initial.retryCount), key.takeIf { it.isNotBlank() })
-            onSaved()
-        }) { Text("SAVE") }
-    }, dismissButton = { TextButton(onClick = onDismiss) { Text("CANCEL") } })
+    }
+
+    AlertDialog(
+        onDismissRequest = { if (!testing) onDismiss() },
+        title = { Text("Configure ${initial.displayName}") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(model, { model = it }, label = { Text("Model") }, singleLine = true)
+                OutlinedTextField(endpoint, { endpoint = it }, label = { Text("Endpoint") }, singleLine = true)
+                OutlinedTextField(
+                    key,
+                    { key = it },
+                    label = { Text(if (manager.hasKey(initial.providerId)) "API key (blank = keep saved key)" else "API key") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation()
+                )
+                Text(
+                    if (manager.hasKey(initial.providerId))
+                        "Saved key stays encrypted on this device. A new key is saved only after a successful live test."
+                    else
+                        "The key is saved only after a successful live test.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(priority, { priority = it.filter(Char::isDigit) }, label = { Text("Priority") }, singleLine = true)
+                OutlinedTextField(timeout, { timeout = it.filter(Char::isDigit) }, label = { Text("Timeout ms") }, singleLine = true)
+                OutlinedTextField(retries, { retries = it.filter(Char::isDigit) }, label = { Text("Retries 0–3") }, singleLine = true)
+                resultText?.let {
+                    Text(it, color = if (resultOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            Button(enabled = !testing, onClick = { test(saveAfterSuccess = true) }) {
+                if (testing) CircularProgressIndicator(modifier = Modifier.padding(end = 8.dp))
+                Text("SAVE & TEST")
+            }
+        },
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(enabled = !testing, onClick = { test(saveAfterSuccess = false) }) { Text("TEST NOW") }
+                TextButton(enabled = !testing, onClick = onDismiss) { Text("CANCEL") }
+            }
+        }
+    )
 }
