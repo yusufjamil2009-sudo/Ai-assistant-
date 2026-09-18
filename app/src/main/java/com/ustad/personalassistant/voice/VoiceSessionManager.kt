@@ -7,10 +7,18 @@ import com.ustad.personalassistant.wake.AndroidSpeechRecognizerWakeWordEngine
 import com.ustad.personalassistant.wake.WakeWordEngine
 import com.ustad.personalassistant.wake.WakeWordError
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class VoiceSessionManager(private val context: Context, private val voiceEngine: VoiceEngine, private val authentication: VoiceAuthenticationEngine, private val settings: SettingsRepository, private val wakeWordEngine: WakeWordEngine = AndroidSpeechRecognizerWakeWordEngine()) {
+    private val _stateFlow = MutableStateFlow(VoiceSessionManagerState.IDLE)
+    val stateFlow: StateFlow<VoiceSessionManagerState> = _stateFlow.asStateFlow()
     @Volatile var state: VoiceSessionManagerState = VoiceSessionManagerState.IDLE
-        private set
+        private set(value) {
+            field = value
+            _stateFlow.value = value
+        }
     @Volatile var sessionType: VoiceSessionType = VoiceSessionType.NORMAL_ASSISTANT_SESSION
         private set
     private var commandTimeoutMs = 8_000L
