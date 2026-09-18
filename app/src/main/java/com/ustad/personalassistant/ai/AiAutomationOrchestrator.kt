@@ -26,13 +26,13 @@ class AiAutomationOrchestrator(
         callConversationMode = enabled
     }
 
-    fun process(request: AiRequest): Result<AiResponse> {
+    fun process(request: AiRequest, voiceAuthenticated: Boolean = false): Result<AiResponse> {
         finalAgent?.let { agent ->
             val session = AssistantSessionContext(
                 sessionId = UUID.randomUUID().toString(),
                 type = if (callConversationMode) AssistantSessionType.CALL_CONVERSATION_SESSION else AssistantSessionType.OWNER_SESSION,
                 authenticated = !callConversationMode,
-                voiceAuthenticated = !callConversationMode
+                voiceAuthenticated = voiceAuthenticated && !callConversationMode
             )
             return when (val result = agent.processText(request.text, session)) {
                 is com.ustad.personalassistant.finalagent.FinalAgentResult ->
