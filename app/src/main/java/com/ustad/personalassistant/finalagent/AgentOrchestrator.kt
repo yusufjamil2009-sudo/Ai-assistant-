@@ -61,8 +61,11 @@ class AgentOrchestrator(
         if (sensitivity == ActionSensitivity.PROTECTED) {
             return FinalAgentResult(FinalResultStatus.PROTECTED_APP, response, "Protected action blocked", requestId)
         }
+        if ((sensitivity == ActionSensitivity.SENSITIVE || sensitivity == ActionSensitivity.HIGHLY_SENSITIVE) && !session.voiceAuthenticated) {
+            return FinalAgentResult(FinalResultStatus.AUTH_REQUIRED, response, "Authenticated owner voice required for this action", requestId)
+        }
         if (requiresConfirmation && !confirmed) {
-            registry.putPending(requestId)
+            registry.putPending(requestId, ActionRequestRegistry.PendingExecutionContext(session.authenticated, session.voiceAuthenticated, session.deviceUnlocked, SecuritySessionType.OWNER, plan.target))
             return FinalAgentResult(FinalResultStatus.CONFIRMATION_REQUIRED, response.copy(requestId = requestId), "Explicit owner confirmation required", requestId)
         }
         if (!capabilityEngine.areAvailable(plan.requiredCapabilities)) {
@@ -96,8 +99,10 @@ class AgentOrchestrator(
         requestId: String
     ): FinalAgentResult {
         val plan = response.actionPlan ?: return FinalAgentResult(FinalResultStatus.ERROR, response, "No executable action", requestId)
+        val pendingContext = registry.pendingContext(requestId) ?: return FinalAgentResult(FinalResultStatus.DUPLICATE_REQUEST, response, "Confirmation context expired", requestId)
         if (session.type == AssistantSessionType.CALL_CONVERSATION_SESSION) return FinalAgentResult(FinalResultStatus.CALLER_SESSION_BLOCKED, response, "Caller confirmation is not authorization", requestId)
         if (!session.isPrivilegedOwner()) return FinalAgentResult(FinalResultStatus.AUTH_REQUIRED, response, "Owner authentication required", requestId)
+        if ((sensitivityFor(plan.action) == ActionSensitivity.SENSITIVE || sensitivityFor(plan.action) == ActionSensitivity.HIGHLY_SENSITIVE) && !pendingContext.voiceAuthenticated) return FinalAgentResult(FinalResultStatus.AUTH_REQUIRED, response, "Authenticated owner voice required for this action", requestId)
         if (registry.state(requestId) != ActionRequestRegistry.State.PENDING_CONFIRMATION) return FinalAgentResult(FinalResultStatus.DUPLICATE_REQUEST, response, "Confirmation is stale or already consumed", requestId)
         if (!registry.beginExecution(requestId)) return FinalAgentResult(FinalResultStatus.DUPLICATE_REQUEST, response, "Request is already executing or completed", requestId)
         val decision = securityFirewall.evaluate(
@@ -105,7 +110,7 @@ class AgentOrchestrator(
                 action = plan.action,
                 targetApp = plan.target,
                 sessionType = SecuritySessionType.OWNER,
-                authenticated = true,
+                authenticated = pendingContext.authenticated,
                 confirmed = true,
                 capabilityAvailable = capabilityEngine.areAvailable(plan.requiredCapabilities),
                 deviceUnlocked = session.deviceUnlocked
@@ -115,7 +120,7 @@ class AgentOrchestrator(
             registry.cancel(requestId)
             return FinalAgentResult(mapSecurityDecision(decision) ?: FinalResultStatus.SECURITY_BLOCKED, response, decision.name, requestId)
         }
-        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(true, true, session.deviceUnlocked, SecuritySessionType.OWNER, plan.target))
+        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(pendingContext.authenticated, true, pendingContext.deviceUnlocked, pendingContext.sessionType, pendingContext.targetApp))
         registry.complete(requestId)
         return FinalAgentResult(mapAutomationStatus(automation.status), response, automation.message, requestId)
     }
