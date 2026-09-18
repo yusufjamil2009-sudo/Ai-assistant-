@@ -31,7 +31,7 @@ abstract class BaseIntentMessagingAdapter(
         }
         if (context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) == null) throw IllegalStateException(MessageErrorCode.UNSUPPORTED_FEATURE.name)
         context.startActivity(intent)
-        MessageResult(MessageState.SUCCESS, message = "Message composer opened; delivery cannot be independently verified.", verified = false)
+        MessageResult(MessageState.WAITING_FOR_USER_SEND, MessageErrorCode.USER_ACTION_REQUIRED, "Composer opened. User must tap Send; delivery is not claimed.", verified = false)
     }.getOrElse { MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message) }
 }
 
