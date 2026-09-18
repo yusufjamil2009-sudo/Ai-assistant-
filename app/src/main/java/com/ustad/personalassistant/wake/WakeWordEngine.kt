@@ -54,6 +54,12 @@ class AndroidSpeechRecognizerWakeWordEngine(private val configuredPhrase: String
         beginRecognition()
     }
 
+    private fun restartRecognition() {
+        if (machine.state != WakeWordState.LISTENING_FOR_WAKE) return
+        recognizer?.cancel()
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ beginRecognition() }, 250L)
+    }
+
     private fun beginRecognition() {
         if (machine.state != WakeWordState.LISTENING_FOR_WAKE) return
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -74,8 +80,8 @@ class AndroidSpeechRecognizerWakeWordEngine(private val configuredPhrase: String
         override fun onBeginningOfSpeech() = Unit
         override fun onRmsChanged(rmsdB: Float) = Unit
         override fun onBufferReceived(buffer: ByteArray?) = Unit
-        override fun onEndOfSpeech() { if (machine.state == WakeWordState.LISTENING_FOR_WAKE) beginRecognition() }
-        override fun onError(error: Int) { if (machine.state == WakeWordState.LISTENING_FOR_WAKE) beginRecognition() }
+        override fun onEndOfSpeech() { if (machine.state == WakeWordState.LISTENING_FOR_WAKE) restartRecognition() }
+        override fun onError(error: Int) { if (machine.state == WakeWordState.LISTENING_FOR_WAKE) restartRecognition() }
         override fun onResults(results: Bundle?) {
             if (machine.state != WakeWordState.LISTENING_FOR_WAKE) return
             val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()

@@ -61,12 +61,21 @@ class BackgroundAssistantService : Service() {
         if (app.permissionManager.verifyPermission(Capability.MICROPHONE) != CapabilityStatus.ON) {
             manager.updateState(BackgroundAssistantState.MIC_PERMISSION_REQUIRED); stopSelf(); return
         }
+        if (!app.voiceSessionManager.isWakeWordAvailable(this)) {
+            manager.updateState(BackgroundAssistantState.WAKE_ENGINE_UNAVAILABLE)
+            stopSelf()
+            return
+        }
         manager.updateState(BackgroundAssistantState.ACTIVE)
         app.voiceSessionManager.startBackgroundWakeListening(this) { error ->
             manager.updateState(if (error.code.name == "UNAVAILABLE") BackgroundAssistantState.WAKE_ENGINE_UNAVAILABLE else BackgroundAssistantState.ERROR)
             stopSelf()
         }
     }
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        return START_STICKY
+    }
+
     override fun onDestroy() {
         val app = application as? UstadApplication
         app?.voiceSessionManager?.stopBackgroundWakeListening()

@@ -40,6 +40,12 @@ class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel> { val app = application as UstadApplication; MainViewModel.Factory(app.appStateRepository, app.permissionManager) }
     override fun onCreate(savedInstanceState: Bundle?) { super.onCreate(savedInstanceState); enableEdgeToEdge(); setContent { UstadApp(viewModel) }; handleGmailRedirect(intent) }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); handleGmailRedirect(intent) }
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 4101 || requestCode == 4102) {
+            viewModel.refresh()
+        }
+    }
     private fun handleGmailRedirect(intent: Intent?) { val data = intent?.data ?: return; if (data.scheme == "ustad-gmail" && data.host == "oauth2redirect") (application as UstadApplication).gmailAuthManager.handleRedirect(data) }
 }
 
