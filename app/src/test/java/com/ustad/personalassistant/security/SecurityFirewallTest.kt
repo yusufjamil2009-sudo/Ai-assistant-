@@ -33,7 +33,7 @@ class SecurityFirewallTest {
     @Test fun financialPackageIsBlocked() {
         assertEquals(
             SecurityDecision.PROTECTED_APP,
-            firewall.evaluate(safeRequest("open", "com.phonepe.app"))
+            firewall.evaluate(safeRequest("open_app", "com.phonepe.app"))
         )
     }
 
@@ -49,7 +49,7 @@ class SecurityFirewallTest {
             SecurityDecision.CALLER_SESSION_BLOCKED,
             firewall.evaluate(
                 SecurityRequest(
-                    "open WhatsApp",
+                    "open_app",
                     sessionType = SecuritySessionType.CALL_CONVERSATION,
                     authenticated = true,
                     capabilityAvailable = true,
@@ -62,32 +62,32 @@ class SecurityFirewallTest {
     @Test fun unauthenticatedOwnerRequiresAuthentication() {
         assertEquals(
             SecurityDecision.AUTH_REQUIRED,
-            firewall.evaluate(safeRequest("open WhatsApp").copy(authenticated = false))
+            firewall.evaluate(safeRequest("open_app").copy(authenticated = false))
         )
     }
 
     @Test fun outboundSendRequiresConfirmation() {
         assertEquals(
             SecurityDecision.CONFIRMATION_REQUIRED,
-            firewall.evaluate(safeRequest("send SMS", confirmed = false))
+            firewall.evaluate(safeRequest("send_message", confirmed = false))
         )
     }
 
     @Test fun confirmedSafeActionIsAllowed() {
-        assertTrue(firewall.canExecute(safeRequest("open calculator", confirmed = true)))
+        assertTrue(firewall.canExecute(safeRequest("open_app", confirmed = true)))
     }
 
     @Test fun unknownCapabilityFailsClosed() {
         assertEquals(
             SecurityDecision.CAPABILITY_REQUIRED,
-            firewall.evaluate(safeRequest("open calculator").copy(capabilityAvailable = false))
+            firewall.evaluate(safeRequest("open_app").copy(capabilityAvailable = false))
         )
     }
 
     @Test fun lockedDeviceIsBlocked() {
         assertEquals(
             SecurityDecision.DEVICE_LOCKED,
-            firewall.evaluate(safeRequest("open calculator").copy(deviceUnlocked = false))
+            firewall.evaluate(safeRequest("open_app").copy(deviceUnlocked = false))
         )
     }
 
