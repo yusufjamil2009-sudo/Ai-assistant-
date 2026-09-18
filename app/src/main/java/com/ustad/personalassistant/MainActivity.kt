@@ -46,15 +46,120 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun UstadApp(viewModel: MainViewModel) {
     val navController = rememberNavController(); val state by viewModel.state.collectAsState(); val context = LocalContext.current; val activity = context as? MainActivity; val app = context.applicationContext as UstadApplication
-    DisposableEffect(activity) { val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_RESUME) viewModel.refresh() }; activity?.lifecycle?.addObserver(observer); onDispose { activity?.lifecycle?.removeObserver(observer) } }
-    MaterialTheme { Scaffold(bottomBar = { NavigationBar { NavigationBarItem(selected = false, onClick = { navController.navigate("home") }, icon = { Icon(Icons.Outlined.Home, null) }, label = { Text("Home") }); NavigationBarItem(selected = false, onClick = { navController.navigate("permissions") }, icon = { Icon(Icons.Outlined.Lock, null) }, label = { Text("Permissions") }); NavigationBarItem(selected = false, onClick = { navController.navigate("settings") }, icon = { Icon(Icons.Outlined.Settings, null) }, label = { Text("Settings") }) } }) { padding -> NavHost(navController, startDestination = "home", modifier = Modifier.padding(padding)) { composable("home") { HomeScreen(state, app.voiceEngine, activity) }; composable("permissions") { PermissionCenterScreen(state, viewModel, activity) }; composable("settings") { SettingsScreen(app, onAiProviders = { navController.navigate("ai-providers") }, onVoice = { navController.navigate("voice-settings") }, onMessaging = { navController.navigate("messaging") }) }; composable("ai-providers") { AiProviderManagerScreen(app.aiProviderManager) }; composable("voice-settings") { VoiceSettingsScreen(app.settingsRepository, app.voiceProviderRegistry, app.sttManager, app.ttsManager) }; composable("messaging") { MessagingStatusScreen(app, state, viewModel, activity) } } } }
+    val backgroundEnabled by app.settingsRepository.backgroundAssistantEnabled.collectAsState(initial = false)
+    DisposableEffect(activity, backgroundEnabled) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refresh()
+                activity?.let {
+                    app.voiceEngine.resumeListeningAfterPermission(it)
+                    if (backgroundEnabled &&
+                        app.permissionManager.verifyPermission(Capability.MICROPHONE) == CapabilityStatus.ON
+                    ) {
+                        app.backgroundAssistantManager.setEnabled(true)
+                    }
+                }
+            }
+        }
+        activity?.lifecycle?.addObserver(observer)
+        onDispose { activity?.lifecycle?.removeObserver(observer) }
+    }
+    MaterialTheme { Scaffold(bottomBar = { NavigationBar { NavigationBarItem(selected = false, onClick = { navController.navigate("home") }, icon = { Icon(Icons.Outlined.Home, null) }, label = { Text("Home") }); NavigationBarItem(selected = false, onClick = { navController.navigate("permissions") }, icon = { Icon(Icons.Outlined.Lock, null) }, label = { Text("Permissions") }); NavigationBarItem(selected = false, onClick = { navController.navigate("settings") }, icon = { Icon(Icons.Outlined.Settings, null) }, label = { Text("Settings") }) } }) { padding -> NavHost(navController, startDestination = "home", modifier = Modifier.padding(padding)) { composable("home") { HomeScreen(state, app, activity) }; composable("permissions") { PermissionCenterScreen(state, viewModel, activity) }; composable("settings") { SettingsScreen(app, onAiProviders = { navController.navigate("ai-providers") }, onVoice = { navController.navigate("voice-settings") }, onMessaging = { navController.navigate("messaging") }) }; composable("ai-providers") { AiProviderManagerScreen(app.aiProviderManager) }; composable("voice-settings") { VoiceSettingsScreen(app.settingsRepository, app.voiceProviderRegistry, app.sttManager, app.ttsManager) }; composable("messaging") { MessagingStatusScreen(app, state, viewModel, activity) } } } }
 }
 
 @Composable
-private fun HomeScreen(state: AppState, voiceEngine: VoiceEngine, activity: MainActivity?) {
-    var transcript by remember { mutableStateOf("") }; var voiceState by remember { mutableStateOf(VoiceSessionState.IDLE) }
-    val onVoiceEvent: (SttEvent) -> Unit = { event -> if (event.type == SttEventType.PARTIAL || event.type == SttEventType.FINAL) transcript = event.result?.text.orEmpty(); voiceState = voiceEngine.getListeningState() }
-    Column(Modifier.fillMaxSize().background(Color(0xFFF7FAFD)).verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) { Text("USTAD", style = MaterialTheme.typography.headlineLarge, color = Color(0xFF071A33)); Text("Personal AI Assistant", style = MaterialTheme.typography.titleMedium); Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Assistant status", style = MaterialTheme.typography.titleLarge); StatusRow("Assistant", if (state.assistantEnabled) CapabilityStatus.ON else CapabilityStatus.OFF); Text("Permission and capability controls are centralized and refreshed from Android system state.") } }; Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { Text("Voice Engine", style = MaterialTheme.typography.titleLarge); Text("State: ${voiceEngine.getListeningState().name}"); if (transcript.isNotBlank()) Text("Transcript: $transcript"); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { Button(enabled = activity != null, onClick = { activity?.let { voiceEngine.startListening(it, onVoiceEvent) } }) { Icon(Icons.Outlined.Mic, null); Text("LISTEN") }; Button(onClick = { voiceEngine.stopListening(); voiceState = VoiceSessionState.IDLE }) { Text("STOP") } }; Text("Voice status: ${voiceState.name}") } }; Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { Text("Security baseline", style = MaterialTheme.typography.titleLarge); Text("No lock-screen bypass, silent permission grants, financial-app automation or covert microphone loop is implemented.") } } }
+private fun HomeScreen(state: AppState, app: UstadApplication, activity: MainActivity?) {
+    var transcript by remember { mutableStateOf("") }
+    var voiceState by remember { mutableStateOf(VoiceSessionState.IDLE) }
+    val backgroundState by app.backgroundAssistantManager.state.collectAsState()
+    val backgroundEnabled by app.settingsRepository.backgroundAssistantEnabled.collectAsState(initial = false)
+    val sessionState by app.voiceSessionManager.stateFlow.collectAsState()
+    val voiceActivated = sessionState == com.ustad.personalassistant.voice.VoiceSessionManagerState.WAKE_DETECTED ||
+        sessionState == com.ustad.personalassistant.voice.VoiceSessionManagerState.ACKNOWLEDGING ||
+        sessionState == com.ustad.personalassistant.voice.VoiceSessionManagerState.AUTHENTICATING ||
+        sessionState == com.ustad.personalassistant.voice.VoiceSessionManagerState.COMMAND_LISTENING ||
+        sessionState == com.ustad.personalassistant.voice.VoiceSessionManagerState.PROCESSING ||
+        sessionState == com.ustad.personalassistant.voice.VoiceSessionManagerState.RESPONDING
+    val onVoiceEvent: (SttEvent) -> Unit = { event ->
+        if (event.type == SttEventType.PARTIAL || event.type == SttEventType.FINAL) transcript = event.result?.text.orEmpty()
+        voiceState = app.voiceEngine.getListeningState()
+    }
+    Column(
+        Modifier.fillMaxSize().background(Color(0xFFF7FAFD)).verticalScroll(rememberScrollState()).padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Text("USTAD", style = MaterialTheme.typography.headlineLarge, color = Color(0xFF071A33))
+        Text("Personal AI Assistant", style = MaterialTheme.typography.titleMedium)
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Assistant status", style = MaterialTheme.typography.titleLarge)
+                StatusRow("Assistant", if (state.assistantEnabled) CapabilityStatus.ON else CapabilityStatus.OFF)
+                Text("Background voice control can stay active through the foreground assistant service.")
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text(if (backgroundEnabled && backgroundState == com.ustad.personalassistant.background.BackgroundAssistantState.ACTIVE) "VOICE ASSISTANT ACTIVE" else "VOICE ASSISTANT OFF", style = MaterialTheme.typography.titleLarge)
+                Button(
+                    enabled = activity != null,
+                    onClick = {
+                        val a = activity ?: return@Button
+                        if (backgroundEnabled &&
+                            app.permissionManager.verifyPermission(Capability.MICROPHONE) == CapabilityStatus.ON
+                        ) {
+                            app.backgroundAssistantManager.setEnabled(false)
+                        } else {
+                            runBlocking { app.settingsRepository.setBackgroundAssistantEnabled(true) }
+                            if (app.permissionManager.verifyPermission(Capability.MICROPHONE) == CapabilityStatus.ON) {
+                                app.backgroundAssistantManager.setEnabled(true)
+                            } else {
+                                app.permissionManager.requestPermission(a, Capability.MICROPHONE)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(64.dp)
+                ) {
+                    Icon(Icons.Outlined.Mic, null)
+                    Spacer(Modifier.width(10.dp))
+                    Text(if (backgroundEnabled) "TURN VOICE OFF" else "TURN VOICE ON")
+                }
+                Text("Say “Hello Assistant” to activate the assistant.")
+                Text("Background state: ${backgroundState.name}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Voice Engine", style = MaterialTheme.typography.titleLarge)
+                Text("State: ${app.voiceEngine.getListeningState().name}")
+                if (transcript.isNotBlank()) Text("Transcript: $transcript")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(enabled = activity != null, onClick = { activity?.let { app.voiceEngine.startListening(it, onVoiceEvent) } }) {
+                        Icon(Icons.Outlined.Mic, null); Text("LISTEN")
+                    }
+                    Button(onClick = { app.voiceEngine.stopListening(); voiceState = VoiceSessionState.IDLE }) { Text("STOP") }
+                }
+                Text("Voice status: ${voiceState.name}")
+            }
+        }
+        if (voiceActivated) {
+            Card(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Outlined.Mic, contentDescription = "Voice activated")
+                    Spacer(Modifier.width(10.dp))
+                    Text("VOICE ACTIVATED • LISTENING", style = MaterialTheme.typography.titleMedium)
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            "Microphone access is visible to Android through its privacy indicator and the persistent foreground-service notification.",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
 }
 
 @Composable

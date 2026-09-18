@@ -9,9 +9,14 @@ object MessagingNotificationStore {
     private val records = ArrayDeque<MessageRecord>()
     private val lock = Any()
 
-    fun ingest(sbn: StatusBarNotification) {
+    fun ingest(sbn: StatusBarNotification, smsPackage: String? = null) {
         val packageName = sbn.packageName.lowercase()
-        val platform = when { packageName == "com.whatsapp" -> MessagingPlatform.WHATSAPP; packageName == "com.facebook.orca" -> MessagingPlatform.MESSENGER; else -> return }
+        val platform = when {
+            packageName == "com.whatsapp" -> MessagingPlatform.WHATSAPP
+            packageName == "com.facebook.orca" -> MessagingPlatform.MESSENGER
+            !smsPackage.isNullOrBlank() && packageName == smsPackage.lowercase() -> MessagingPlatform.SMS
+            else -> return
+        }
         val extras: Bundle = sbn.notification.extras ?: return
         val sender = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.trim().orEmpty()
         val text = (extras.getCharSequence(Notification.EXTRA_BIG_TEXT) ?: extras.getCharSequence(Notification.EXTRA_TEXT))?.toString()?.trim().orEmpty()

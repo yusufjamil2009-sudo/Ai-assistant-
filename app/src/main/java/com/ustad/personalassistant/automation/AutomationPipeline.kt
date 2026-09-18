@@ -7,6 +7,8 @@ import com.ustad.personalassistant.permissions.Capability
 import com.ustad.personalassistant.security.SecurityDecision
 import com.ustad.personalassistant.security.SecurityFirewall
 import com.ustad.personalassistant.security.SecurityRequest
+import com.ustad.personalassistant.security.SecurityContext
+import com.ustad.personalassistant.security.toRequest
 import com.ustad.personalassistant.security.SecuritySessionType
 import com.ustad.personalassistant.security.DefaultProtectedAppPolicy
 import com.ustad.personalassistant.security.SecurityManager
@@ -23,7 +25,8 @@ class AutomationPipeline(
         action: String,
         targetApp: String?,
         capabilities: List<Capability>,
-        sessionType: SecuritySessionType = SecuritySessionType.OWNER
+        sessionType: SecuritySessionType = SecuritySessionType.OWNER,
+        securityContext: SecurityContext? = null
     ): AutomationResult<Unit> {
         val start = System.currentTimeMillis()
         fun finish(status: AutomationResultStatus, message: String? = null): AutomationResult<Unit> {
@@ -33,16 +36,12 @@ class AutomationPipeline(
         }
         if (capabilities.any { !capabilityEngine.isAvailable(it) }) return finish(AutomationResultStatus.PERMISSION_REQUIRED)
 
+        val context = securityContext ?: return finish(AutomationResultStatus.SECURITY_BLOCKED, SecurityDecision.SECURITY_STATE_UNKNOWN.name)
+        if (context.sessionType != sessionType || context.targetApp != targetApp) {
+            return finish(AutomationResultStatus.SECURITY_BLOCKED, SecurityDecision.SECURITY_STATE_UNKNOWN.name)
+        }
         val securityDecision = securityFirewall.evaluate(
-            SecurityRequest(
-                action = action,
-                targetApp = targetApp,
-                sessionType = sessionType,
-                authenticated = sessionType == SecuritySessionType.OWNER,
-                confirmed = true,
-                capabilityAvailable = true,
-                deviceUnlocked = true
-            )
+            context.toRequest(action, capabilityAvailable = true)
         )
         if (securityDecision != SecurityDecision.ALLOW) {
             val status = when (securityDecision) {

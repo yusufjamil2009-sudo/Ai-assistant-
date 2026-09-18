@@ -4,7 +4,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.telephony.SmsManager
+import android.net.Uri
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
 import java.util.concurrent.ConcurrentHashMap
@@ -31,7 +31,7 @@ abstract class BaseIntentMessagingAdapter(
         }
         if (context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) == null) throw IllegalStateException(MessageErrorCode.UNSUPPORTED_FEATURE.name)
         context.startActivity(intent)
-        MessageResult(MessageState.SUCCESS, message = "Message composer opened; delivery cannot be independently verified.", verified = false)
+        MessageResult(MessageState.WAITING_FOR_USER_SEND, MessageErrorCode.USER_ACTION_REQUIRED, "Composer opened. User must tap Send; delivery is not claimed.", verified = false)
     }.getOrElse { MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message) }
 }
 
@@ -47,35 +47,30 @@ class SmsAdapter(private val context: Context) : MessageProvider {
     override val platform = MessagingPlatform.SMS
     override fun isAvailable(): Boolean = context.packageManager.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)
     override fun openApp(): Result<Unit> = runCatching {
-        val intent = context.packageManager.getLaunchIntentForPackage(Telephony.Sms.getDefaultSmsPackage(context) ?: "") ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
+        val defaultPackage = Telephony.Sms.getDefaultSmsPackage(context)
+        val intent = defaultPackage?.takeIf { it.isNotBlank() }
+            ?.let { context.packageManager.getLaunchIntentForPackage(it) }
+            ?: Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_MESSAGING)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
-    override fun readMessages(contact: String?, limit: Int): Result<List<MessageRecord>> {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED || !isDefaultSmsApp()) return Result.failure(IllegalStateException(MessageErrorCode.SMS_PERMISSION_OR_ROLE_UNAVAILABLE.name))
-        return runCatching {
-            val result = mutableListOf<MessageRecord>()
-            val projection = arrayOf(Telephony.Sms._ID, Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE, Telephony.Sms.THREAD_ID)
-            context.contentResolver.query(Telephony.Sms.Inbox.CONTENT_URI, projection, null, null, Telephony.Sms.DATE + " DESC")?.use { cursor ->
-                val id = cursor.getColumnIndex(Telephony.Sms._ID); val address = cursor.getColumnIndex(Telephony.Sms.ADDRESS); val body = cursor.getColumnIndex(Telephony.Sms.BODY); val date = cursor.getColumnIndex(Telephony.Sms.DATE); val thread = cursor.getColumnIndex(Telephony.Sms.THREAD_ID)
-                while (cursor.moveToNext() && result.size < limit.coerceIn(1, 50)) {
-                    val sender = cursor.getString(address).orEmpty(); if (!contact.isNullOrBlank() && !sender.contains(contact, true)) continue
-                    result += SensitiveMessageDetector.redact(MessageRecord(MessagingPlatform.SMS, sender, cursor.getString(body).orEmpty(), cursor.getLong(date), cursor.getString(thread), cursor.getString(id)))
-                }
-            }
-            result
+    override fun readMessages(contact: String?, limit: Int): Result<List<MessageRecord>> =
+        Result.success(MessagingNotificationStore.recent(MessagingPlatform.SMS, contact, limit).map(SensitiveMessageDetector::redact))
+
+    override fun send(request: MessageSendRequest): Result<MessageResult> = runCatching {
+        if (!isAvailable()) return@runCatching MessageResult(MessageState.FAILED, MessageErrorCode.SMS_PERMISSION_OR_ROLE_UNAVAILABLE)
+        val intent = Intent(Intent.ACTION_SENDTO).apply {
+            data = Uri.parse("smsto:${Uri.encode(request.recipient.phoneNumber)}")
+            putExtra("sms_body", request.text)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-    }
-    override fun send(request: MessageSendRequest): Result<MessageResult> {
-        if (!isAvailable() || ContextCompat.checkSelfPermission(context, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return Result.success(MessageResult(MessageState.FAILED, MessageErrorCode.SMS_PERMISSION_OR_ROLE_UNAVAILABLE))
-        return runCatching {
-            val manager = SmsManager.getDefault()
-            val parts = manager.divideMessage(request.text)
-            if (parts.size == 1) manager.sendTextMessage(request.recipient.phoneNumber, null, request.text, null, null) else manager.sendMultipartTextMessage(request.recipient.phoneNumber, null, parts, null, null)
-            MessageResult(MessageState.SUCCESS, message = "SMS submission accepted by Android; delivery cannot be independently verified.", verified = false)
-        }.fold(onSuccess = { Result.success(it) }, onFailure = { Result.success(MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message)) })
-    }
-    private fun isDefaultSmsApp(): Boolean = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+        if (context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) == null) throw IllegalStateException(MessageErrorCode.UNSUPPORTED_FEATURE.name)
+        context.startActivity(intent)
+        MessageResult(MessageState.WAITING_FOR_USER_SEND, MessageErrorCode.USER_ACTION_REQUIRED, "SMS composer opened. User must tap Send; delivery is not claimed.", verified = false)
+    }.fold(
+        onSuccess = { Result.success(it) },
+        onFailure = { Result.success(MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message)) }
+    )
 }
 
 class DefaultMessagingEngine(

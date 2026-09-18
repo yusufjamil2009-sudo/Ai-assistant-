@@ -7,30 +7,56 @@ import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 class ApiManager(
-    private val providers: List<AiProvider>,
+    private val providerSource: () -> List<AiProvider>,
     private val networkState: () -> NetworkState = { NetworkState.ONLINE },
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val usageTracker: UsageTracker = InMemoryUsageTracker()
 ) {
+    constructor(
+        providers: List<AiProvider>,
+        networkState: () -> NetworkState = { NetworkState.ONLINE },
+        clock: () -> Long = { System.currentTimeMillis() },
+        usageTracker: UsageTracker = InMemoryUsageTracker()
+    ) : this({ providers }, networkState, clock, usageTracker)
+
     private val health = mutableMapOf<String, ProviderHealth>()
     private val cooldownMs = 30_000L
 
     fun selectProvider(request: AiRequest): AiProvider? = candidates(request).firstOrNull()
     fun usage(): Map<String, ProviderUsage> = usageTracker.snapshot()
-    fun health(providerId: String): ProviderHealth = health[providerId] ?: providers.firstOrNull { it.providerId == providerId }?.healthCheck() ?: ProviderHealth()
+    fun health(providerId: String): ProviderHealth = health[providerId]
+        ?: providerSource().firstOrNull { it.providerId == providerId }?.healthCheck()
+        ?: ProviderHealth()
 
     fun generate(request: AiRequest): Result<AiResponse> = generateInternal(request)
     fun generateAsync(scope: CoroutineScope, request: AiRequest, onResult: (Result<AiResponse>) -> Unit): Job = scope.launch(Dispatchers.IO) { onResult(generateInternal(request)) }
 
     fun stream(request: AiRequest, onEvent: (AiStreamEvent) -> Unit): Result<AiResponse> {
         if (networkState() == NetworkState.OFFLINE) return Result.failure(AiException(AiErrorCode.OFFLINE))
-        val provider = selectProvider(request) ?: return Result.failure(AiException(AiErrorCode.NO_PROVIDER_AVAILABLE))
+        val list = candidates(request)
+        if (list.isEmpty()) return Result.failure(AiException(AiErrorCode.NO_PROVIDER_AVAILABLE))
         onEvent(AiStreamEvent(AiStreamEventType.START))
-        val started = clock()
-        val result = provider.stream(request) { event -> onEvent(event) }
-        usageTracker.record(provider.providerId, result.getOrNull(), (clock() - started).coerceAtLeast(0L), result.isSuccess)
-        if (result.isFailure) onEvent(AiStreamEvent(AiStreamEventType.ERROR, error = AiError(AiErrorCode.PROVIDER_INVALID_RESPONSE, "Provider stream failed")))
-        return result.map { it.copy(providerId = it.providerId ?: provider.providerId, model = it.model ?: provider.model) }
+        var last: AiException? = null
+        for (provider in list) {
+            val started = clock()
+            val result = provider.stream(request) { event -> if (event.type != AiStreamEventType.START) onEvent(event) }
+            val elapsed = (clock() - started).coerceAtLeast(0L)
+            usageTracker.record(provider.providerId, result.getOrNull(), elapsed, result.isSuccess)
+            if (result.isSuccess) {
+                health[provider.providerId] = ProviderHealth(ProviderHealthStatus.HEALTHY, elapsed, clock(), health[provider.providerId]?.lastFailure, 0, null)
+                val response = result.getOrThrow().copy(
+                    providerId = result.getOrThrow().providerId ?: provider.providerId,
+                    model = result.getOrThrow().model ?: provider.model
+                )
+                onEvent(AiStreamEvent(AiStreamEventType.COMPLETE, response = response))
+                return Result.success(response)
+            }
+            val code = classify(result.exceptionOrNull())
+            last = AiException(code)
+            markFailure(provider.providerId, code, elapsed)
+        }
+        onEvent(AiStreamEvent(AiStreamEventType.ERROR, error = AiError(last?.code ?: AiErrorCode.ALL_PROVIDERS_FAILED, "All configured providers failed")))
+        return Result.failure(last ?: AiException(AiErrorCode.ALL_PROVIDERS_FAILED))
     }
 
     private fun generateInternal(request: AiRequest): Result<AiResponse> {
@@ -46,19 +72,31 @@ class ApiManager(
                 usageTracker.record(provider.providerId, result.getOrNull(), elapsed, result.isSuccess)
                 if (result.isSuccess) {
                     health[provider.providerId] = ProviderHealth(ProviderHealthStatus.HEALTHY, elapsed, clock(), health[provider.providerId]?.lastFailure, 0, null)
-                    val normalized = result.getOrThrow().copy(providerId = result.getOrThrow().providerId ?: provider.providerId, model = result.getOrThrow().model ?: provider.model)
+                    val response = result.getOrThrow()
+                    val normalized = response.copy(providerId = response.providerId ?: provider.providerId, model = response.model ?: provider.model)
                     if (normalized.actionPlan?.let { DefaultActionPlanValidator().validate(it) } == false) return Result.failure(AiException(AiErrorCode.INVALID_AI_RESPONSE))
                     return Result.success(normalized)
                 }
                 val code = classify(result.exceptionOrNull())
                 last = AiException(code)
-                val failures = (health[provider.providerId]?.consecutiveFailures ?: 0) + 1
-                val cooldown = if (code == AiErrorCode.PROVIDER_RATE_LIMITED || attempt == provider.retryCount) clock() + cooldownMs else null
-                health[provider.providerId] = ProviderHealth(if (cooldown != null) ProviderHealthStatus.COOLDOWN else ProviderHealthStatus.DEGRADED, elapsed, health[provider.providerId]?.lastSuccess, clock(), failures, cooldown)
+                markFailure(provider.providerId, code, elapsed, attempt == provider.retryCount)
                 if (attempt < provider.retryCount) Thread.sleep(backoffMs(attempt))
             }
         }
         return Result.failure(last ?: AiException(AiErrorCode.ALL_PROVIDERS_FAILED))
+    }
+
+    private fun markFailure(providerId: String, code: AiErrorCode, elapsed: Long, forceCooldown: Boolean = true) {
+        val failures = (health[providerId]?.consecutiveFailures ?: 0) + 1
+        val cooldown = if (code == AiErrorCode.PROVIDER_RATE_LIMITED || forceCooldown) clock() + cooldownMs else null
+        health[providerId] = ProviderHealth(
+            if (cooldown != null) ProviderHealthStatus.COOLDOWN else ProviderHealthStatus.DEGRADED,
+            elapsed,
+            health[providerId]?.lastSuccess,
+            clock(),
+            failures,
+            cooldown
+        )
     }
 
     private fun runProviderWithTimeout(provider: AiProvider, request: AiRequest): Result<AiResponse> = runCatching {
@@ -68,9 +106,13 @@ class ApiManager(
         finally { executor.shutdownNow() }
     }.fold({ it }, { throwable -> Result.failure(if (throwable is java.util.concurrent.TimeoutException) AiException(AiErrorCode.PROVIDER_TIMEOUT) else throwable) })
 
-    private fun candidates(request: AiRequest): List<AiProvider> = providers.filter { it.enabled && it.isAvailable() && request.requiredCapabilities.all(it.capabilities::contains) }
-        .filter { health[it.providerId]?.let { h -> h.status == ProviderHealthStatus.COOLDOWN && (h.cooldownUntil ?: 0L) > clock() } != true }
-        .sortedBy { it.priority }
+    private fun candidates(request: AiRequest): List<AiProvider> {
+        val currentProviders = providerSource()
+        return currentProviders
+            .filter { it.enabled && it.isAvailable() && request.requiredCapabilities.all(it.capabilities::contains) }
+            .filter { health[it.providerId]?.let { h -> h.status == ProviderHealthStatus.COOLDOWN && (h.cooldownUntil ?: 0L) > clock() } != true }
+            .sortedBy { it.priority }
+    }
 
     private fun backoffMs(attempt: Int): Long {
         val base = (150L * (1L shl attempt.coerceIn(0, 3))).coerceAtMost(1_200L)
