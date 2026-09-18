@@ -6,6 +6,7 @@ import com.ustad.personalassistant.capability.CapabilityEngine
 import com.ustad.personalassistant.permissions.Capability
 import com.ustad.personalassistant.security.SecurityManager
 import kotlinx.coroutines.CancellationException
+import android.os.Looper
 
 interface ActionVerificationEngine {
     fun verifyForeground(packageName: String, timeoutMs: Long = 3_000L): Boolean
@@ -14,11 +15,18 @@ interface ActionVerificationEngine {
 
 class AndroidActionVerificationEngine(private val accessibility: AccessibilityActionEngine) : ActionVerificationEngine {
     override fun verifyForeground(packageName: String, timeoutMs: Long): Boolean {
+        fun matches(): Boolean {
+            val snapshot = accessibility.snapshot()
+            return snapshot.isSuccess && snapshot.value?.packageName == packageName
+        }
+        // Never block the UI thread. The normal execution path is already off the UI thread;
+        // a UI-thread verification performs a non-blocking snapshot and fails closed if the
+        // target has not become foreground yet.
+        if (Looper.myLooper() == Looper.getMainLooper()) return matches()
         val end = System.currentTimeMillis() + timeoutMs.coerceIn(0L, 10_000L)
         while (System.currentTimeMillis() <= end) {
-            val snapshot = accessibility.snapshot()
-            if (snapshot.isSuccess && snapshot.value?.packageName == packageName) return true
-            Thread.sleep(100L)
+            if (matches()) return true
+            try { Thread.sleep(100L) } catch (_: InterruptedException) { Thread.currentThread().interrupt(); return false }
         }
         return false
     }
