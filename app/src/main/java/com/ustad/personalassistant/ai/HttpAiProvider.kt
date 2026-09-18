@@ -53,8 +53,15 @@ class HttpAiProvider(
 private fun appendQueryKey(endpoint: String, key: String): String = endpoint + if (endpoint.contains('?')) "&key=${java.net.URLEncoder.encode(key, "UTF-8")}" else "?key=${java.net.URLEncoder.encode(key, "UTF-8")}"
 
 private fun defaultRequest(request: AiRequest, config: ProviderConfig, key: String): String {
-    if (config.providerId.equals("gemini", true)) return JSONObject().put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", request.text))))).toString()
-    return JSONObject().apply { put("model", config.model); put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", request.text))) }.toString()
+    if (config.providerId.equals("gemini", true)) return JSONObject()
+        .put("contents", JSONArray().put(JSONObject().put("role", "user").put("parts", JSONArray().put(JSONObject().put("text", request.text)))))
+        .put("generationConfig", JSONObject().put("maxOutputTokens", 8))
+        .toString()
+    return JSONObject().apply {
+        put("model", config.model)
+        put("messages", JSONArray().put(JSONObject().put("role", "user").put("content", request.text)))
+        put("max_tokens", 8)
+    }.toString()
 }
 
 private fun defaultResponse(raw: String, config: ProviderConfig): AiResponse {

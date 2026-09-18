@@ -62,7 +62,7 @@ class AgentOrchestrator(
         }
         if (requiresConfirmation && !confirmed) {
             registry.putPending(requestId)
-            return FinalAgentResult(FinalResultStatus.CONFIRMATION_REQUIRED, response, "Explicit owner confirmation required", requestId)
+            return FinalAgentResult(FinalResultStatus.CONFIRMATION_REQUIRED, response.copy(requestId = requestId), "Explicit owner confirmation required", requestId)
         }
         if (!capabilityEngine.areAvailable(plan.requiredCapabilities)) {
             return FinalAgentResult(FinalResultStatus.CAPABILITY_REQUIRED, response, "Required capability unavailable", requestId)

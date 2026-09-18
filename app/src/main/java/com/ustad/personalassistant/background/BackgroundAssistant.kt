@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -45,6 +46,8 @@ enum class BackgroundAssistantState { DISABLED, STARTING, ACTIVE, PAUSED, MIC_PE
 
 class BackgroundAssistantService : Service() {
     private val channelId = "ustad_background_assistant"
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
@@ -55,7 +58,16 @@ class BackgroundAssistantService : Service() {
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
-        try { startForeground(4105, notification) } catch (_: SecurityException) { stopSelf(); return }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(4105, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            } else {
+                @Suppress("DEPRECATION") startForeground(4105, notification)
+            }
+        } catch (_: SecurityException) {
+            stopSelf()
+            return
+        }
         val app = application as UstadApplication
         val manager = app.backgroundAssistantManager
         if (app.permissionManager.verifyPermission(Capability.MICROPHONE) != CapabilityStatus.ON) {

@@ -36,5 +36,26 @@ class ConfiguredProvider(private val config: ProviderConfig, private val generat
 }
 
 object DefaultProviderSlots {
-    fun configs(): List<ProviderConfig> = listOf("gemini" to "Gemini", "openrouter" to "OpenRouter", "groq" to "Groq", "mistral" to "Mistral", "sambanova" to "SambaNova", "zhipu" to "Zhipu").mapIndexed { index, (id, name) -> ProviderConfig(id, name, enabled = false, priority = index + 1) }
+    private data class Slot(val id: String, val name: String, val model: String, val endpoint: String)
+
+    private val slots = listOf(
+        Slot("gemini", "Gemini", "gemini-2.5-flash", "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"),
+        Slot("openrouter", "OpenRouter", "openai/gpt-oss-20b:free", "https://openrouter.ai/api/v1/chat/completions"),
+        Slot("groq", "Groq", "llama-3.3-70b-versatile", "https://api.groq.com/openai/v1/chat/completions"),
+        Slot("mistral", "Mistral", "mistral-small-latest", "https://api.mistral.ai/v1/chat/completions"),
+        Slot("sambanova", "SambaNova", "Meta-Llama-3.3-70B-Instruct", "https://api.sambanova.ai/v1/chat/completions"),
+        Slot("zhipu", "Zhipu", "glm-4.5-flash", "https://open.bigmodel.cn/api/paas/v4/chat/completions")
+    )
+
+    fun configs(): List<ProviderConfig> = slots.mapIndexed { index, slot ->
+        ProviderConfig(
+            providerId = slot.id,
+            displayName = slot.name,
+            enabled = false,
+            priority = index + 1,
+            model = slot.model,
+            endpoint = slot.endpoint,
+            capabilities = setOf(AiCapability.CHAT, AiCapability.TEXT_GENERATION)
+        )
+    }
 }

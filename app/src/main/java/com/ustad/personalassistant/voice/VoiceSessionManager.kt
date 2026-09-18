@@ -7,16 +7,24 @@ import com.ustad.personalassistant.wake.AndroidSpeechRecognizerWakeWordEngine
 import com.ustad.personalassistant.wake.WakeWordEngine
 import com.ustad.personalassistant.wake.WakeWordError
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class VoiceSessionManager(private val context: Context, private val voiceEngine: VoiceEngine, private val authentication: VoiceAuthenticationEngine, private val settings: SettingsRepository, private val wakeWordEngine: WakeWordEngine = AndroidSpeechRecognizerWakeWordEngine()) {
+    private val _stateFlow = MutableStateFlow(VoiceSessionManagerState.IDLE)
+    val stateFlow: StateFlow<VoiceSessionManagerState> = _stateFlow.asStateFlow()
     @Volatile var state: VoiceSessionManagerState = VoiceSessionManagerState.IDLE
-        private set
+        private set(value) {
+            field = value
+            _stateFlow.value = value
+        }
     @Volatile var sessionType: VoiceSessionType = VoiceSessionType.NORMAL_ASSISTANT_SESSION
         private set
     private var commandTimeoutMs = 8_000L
     private var timeoutThread: Thread? = null
 
-    fun setSessionType(type: VoiceSessionType) { sessionType = type; if (type == VoiceSessionType.CALL_CONVERSATION_SESSION) stopBackgroundWakeListening() }
+    fun setSessionType(type: VoiceSessionType) { sessionType = type; voiceEngine.setCallConversationMode(type == VoiceSessionType.CALL_CONVERSATION_SESSION); if (type == VoiceSessionType.CALL_CONVERSATION_SESSION) stopBackgroundWakeListening() }
     fun startBackgroundWakeListening(serviceContext: Context, onError: (WakeWordError) -> Unit = {}) {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
         if (!runBlockingSettings { settings.wakeWordEnabled }) return
@@ -31,7 +39,18 @@ class VoiceSessionManager(private val context: Context, private val voiceEngine:
     }
     private fun authenticateThenListen() {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
-        if (!runBlockingSettings { settings.voiceAuthenticationEnabled }) { state = VoiceSessionManagerState.IDLE; voiceEngine.speak("Voice authentication is required for background control."); return }
+        if (!runBlockingSettings { settings.voiceAuthenticationEnabled }) {
+            state = VoiceSessionManagerState.COMMAND_LISTENING
+            startCommandTimeout()
+            voiceEngine.startListeningFromBackground { event ->
+                if (event.type == SttEventType.FINAL) {
+                    state = VoiceSessionManagerState.RESPONDING
+                    cancelTimeout()
+                }
+                if (event.type == SttEventType.ERROR) state = VoiceSessionManagerState.ERROR
+            }
+            return
+        }
         state = VoiceSessionManagerState.AUTHENTICATING
         val attempt = authentication.authenticate().getOrElse { state = VoiceSessionManagerState.ERROR; return }
         if (!VoiceAuthenticationPolicy.mayEnterControlPipeline(sessionType, attempt.result)) {
