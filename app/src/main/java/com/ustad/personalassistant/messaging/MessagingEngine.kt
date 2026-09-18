@@ -66,7 +66,7 @@ class SmsAdapter(private val context: Context) : MessageProvider {
         }
         if (context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY) == null) throw IllegalStateException(MessageErrorCode.UNSUPPORTED_FEATURE.name)
         context.startActivity(intent)
-        MessageResult(MessageState.SUCCESS, message = "SMS composer opened; delivery cannot be independently verified.", verified = false)
+        MessageResult(MessageState.WAITING_FOR_USER_SEND, MessageErrorCode.USER_ACTION_REQUIRED, "SMS composer opened. User must tap Send; delivery is not claimed.", verified = false)
     }.fold(
         onSuccess = { Result.success(it) },
         onFailure = { Result.success(MessageResult(MessageState.FAILED, MessageErrorCode.SEND_FAILED, it.message)) }
