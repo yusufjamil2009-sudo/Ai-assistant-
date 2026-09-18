@@ -24,7 +24,7 @@ class VoiceSessionManager(private val context: Context, private val voiceEngine:
     private var commandTimeoutMs = 8_000L
     private var timeoutThread: Thread? = null
 
-    fun setSessionType(type: VoiceSessionType) { sessionType = type; voiceEngine.setCallConversationMode(type == VoiceSessionType.CALL_CONVERSATION_SESSION); if (type == VoiceSessionType.CALL_CONVERSATION_SESSION) stopBackgroundWakeListening() }
+    fun setSessionType(type: VoiceSessionType) { sessionType = type; voiceEngine.setVoiceAuthenticated(false); voiceEngine.setCallConversationMode(type == VoiceSessionType.CALL_CONVERSATION_SESSION); if (type == VoiceSessionType.CALL_CONVERSATION_SESSION) stopBackgroundWakeListening() }
     fun startBackgroundWakeListening(serviceContext: Context, onError: (WakeWordError) -> Unit = {}) {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
         if (!runBlockingSettings { settings.wakeWordEnabled }) return
@@ -40,6 +40,7 @@ class VoiceSessionManager(private val context: Context, private val voiceEngine:
     private fun authenticateThenListen() {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
         if (!runBlockingSettings { settings.voiceAuthenticationEnabled }) {
+            voiceEngine.setVoiceAuthenticated(false);
             state = VoiceSessionManagerState.COMMAND_LISTENING
             startCommandTimeout()
             voiceEngine.startListeningFromBackground { event ->
@@ -58,17 +59,19 @@ class VoiceSessionManager(private val context: Context, private val voiceEngine:
             if (attempt.result == VoiceAuthenticationResult.UNAUTHORIZED || attempt.result == VoiceAuthenticationResult.LOCKED_OUT) voiceEngine.speak(if (attempt.result == VoiceAuthenticationResult.LOCKED_OUT) "Voice authentication is temporarily locked." else "Voice authentication failed.")
             return
         }
+        voiceEngine.setVoiceAuthenticated(true)
         state = VoiceSessionManagerState.COMMAND_LISTENING; startCommandTimeout()
         voiceEngine.startListeningFromBackground { event -> if (event.type == SttEventType.FINAL) { state = VoiceSessionManagerState.RESPONDING; cancelTimeout() }; if (event.type == SttEventType.ERROR) state = VoiceSessionManagerState.ERROR }
     }
     fun startManualCommandListening(activity: Activity, onEvent: (SttEvent) -> Unit = {}) {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
+        voiceEngine.setVoiceAuthenticated(false)
         state = VoiceSessionManagerState.COMMAND_LISTENING
         voiceEngine.startListening(activity) { event -> onEvent(event); if (event.type == SttEventType.FINAL) { state = VoiceSessionManagerState.RESPONDING; cancelTimeout() }; if (event.type == SttEventType.ERROR) state = VoiceSessionManagerState.ERROR }
     }
     private fun startCommandTimeout() { cancelTimeout(); timeoutThread = Thread { try { Thread.sleep(commandTimeoutMs) } catch (_: InterruptedException) { return@Thread }; if (state == VoiceSessionManagerState.COMMAND_LISTENING) { voiceEngine.stopListening(); voiceEngine.speak("जी?"); state = VoiceSessionManagerState.IDLE } }.also { it.isDaemon = true; it.start() } }
     fun setCommandTimeoutMs(value: Long) { commandTimeoutMs = value.coerceIn(3_000L, 20_000L) }
-    fun cancel() { cancelTimeout(); voiceEngine.cancelListening(); voiceEngine.stopSpeaking(); state = VoiceSessionManagerState.IDLE }
+    fun cancel() { cancelTimeout(); voiceEngine.setVoiceAuthenticated(false); voiceEngine.cancelListening(); voiceEngine.stopSpeaking(); state = VoiceSessionManagerState.IDLE }
     fun pause() { cancelTimeout(); wakeWordEngine.pause(); voiceEngine.stopListening(); state = VoiceSessionManagerState.PAUSED }
     fun resume() { if (state == VoiceSessionManagerState.PAUSED) { state = VoiceSessionManagerState.IDLE; wakeWordEngine.resume() } }
     private fun cancelTimeout() { timeoutThread?.interrupt(); timeoutThread = null }
