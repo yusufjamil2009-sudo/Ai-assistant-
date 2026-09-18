@@ -44,7 +44,7 @@ class AgentOrchestrator(
         val response = brain.processRequest(request).getOrElse {
             return FinalAgentResult(FinalResultStatus.AI_SERVICE_UNAVAILABLE, message = it.message)
         }
-        val plan = response.actionPlan ?: return FinalAgentResult(FinalResultStatus.CHAT_RESPONSE, response = response.copy(requestId = requestId), requestId = requestId)
+        val plan = response.actionPlan ?: return FinalAgentResult(FinalResultStatus.CHAT_RESPONSE, response = response)
         if (plan.action.isBlank()) return FinalAgentResult(FinalResultStatus.ERROR, message = "Invalid action plan")
 
         val requestId = UUID.randomUUID().toString()
