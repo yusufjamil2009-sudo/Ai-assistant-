@@ -24,7 +24,7 @@ class VoiceSessionManager(private val context: Context, private val voiceEngine:
     private var commandTimeoutMs = 8_000L
     private var timeoutThread: Thread? = null
 
-    fun setSessionType(type: VoiceSessionType) { sessionType = type; if (type == VoiceSessionType.CALL_CONVERSATION_SESSION) stopBackgroundWakeListening() }
+    fun setSessionType(type: VoiceSessionType) { sessionType = type; voiceEngine.setCallConversationMode(type == VoiceSessionType.CALL_CONVERSATION_SESSION); if (type == VoiceSessionType.CALL_CONVERSATION_SESSION) stopBackgroundWakeListening() }
     fun startBackgroundWakeListening(serviceContext: Context, onError: (WakeWordError) -> Unit = {}) {
         if (sessionType != VoiceSessionType.NORMAL_ASSISTANT_SESSION) return
         if (!runBlockingSettings { settings.wakeWordEnabled }) return
