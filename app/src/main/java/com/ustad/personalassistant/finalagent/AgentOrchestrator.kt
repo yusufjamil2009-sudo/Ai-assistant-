@@ -65,7 +65,7 @@ class AgentOrchestrator(
             return FinalAgentResult(FinalResultStatus.AUTH_REQUIRED, response, "Authenticated owner voice required for this action", requestId)
         }
         if (requiresConfirmation && !confirmed) {
-            registry.putPending(requestId, ActionRequestRegistry.PendingExecutionContext(session.authenticated, session.voiceAuthenticated, session.deviceUnlocked, SecuritySessionType.OWNER, plan.target))
+            registry.putPending(requestId, ActionRequestRegistry.PendingExecutionContext(session.authenticated, session.voiceAuthenticated, session.deviceUnlocked, session.type, plan.target))
             return FinalAgentResult(FinalResultStatus.CONFIRMATION_REQUIRED, response.copy(requestId = requestId), "Explicit owner confirmation required", requestId)
         }
         if (!capabilityEngine.areAvailable(plan.requiredCapabilities)) {
@@ -76,7 +76,7 @@ class AgentOrchestrator(
             SecurityRequest(
                 action = plan.action,
                 targetApp = plan.target,
-                sessionType = SecuritySessionType.OWNER,
+                sessionType = session.securitySessionType(),
                 authenticated = session.authenticated,
                 confirmed = confirmed || !requiresConfirmation,
                 capabilityAvailable = true,
@@ -88,7 +88,8 @@ class AgentOrchestrator(
 
         registry.putPending(requestId)
         if (!registry.beginExecution(requestId)) return FinalAgentResult(FinalResultStatus.DUPLICATE_REQUEST, response, "Request is no longer executable", requestId)
-        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(session.authenticated, confirmed || !requiresConfirmation, session.deviceUnlocked, SecuritySessionType.OWNER, plan.target))
+        val securitySessionType = session.securitySessionType()
+        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, securitySessionType, SecurityContext(session.authenticated, confirmed || !requiresConfirmation, session.deviceUnlocked, securitySessionType, plan.target))
         registry.complete(requestId)
         return FinalAgentResult(mapAutomationStatus(automation.status), response, automation.message, requestId)
     }
@@ -120,7 +121,8 @@ class AgentOrchestrator(
             registry.cancel(requestId)
             return FinalAgentResult(mapSecurityDecision(decision) ?: FinalResultStatus.SECURITY_BLOCKED, response, decision.name, requestId)
         }
-        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, SecuritySessionType.OWNER, SecurityContext(pendingContext.authenticated, true, pendingContext.deviceUnlocked, pendingContext.sessionType, pendingContext.targetApp))
+        val securitySessionType = pendingContext.sessionType.securitySessionType()
+        val automation = pipeline.execute(plan.action, plan.target, plan.requiredCapabilities, securitySessionType, SecurityContext(pendingContext.authenticated, true, pendingContext.deviceUnlocked, securitySessionType, pendingContext.targetApp))
         registry.complete(requestId)
         return FinalAgentResult(mapAutomationStatus(automation.status), response, automation.message, requestId)
     }
@@ -163,3 +165,18 @@ class AgentOrchestrator(
 
 private fun CapabilityEngine.areAvailable(capabilities: List<com.ustad.personalassistant.permissions.Capability>): Boolean =
     capabilities.all(::isAvailable)
+
+
+private fun AssistantSessionContext.securitySessionType(): SecuritySessionType = when (type) {
+    AssistantSessionType.CALL_CONVERSATION_SESSION -> SecuritySessionType.CALL_CONVERSATION
+    AssistantSessionType.OWNER_SESSION,
+    AssistantSessionType.BACKGROUND_ASSISTANT_SESSION,
+    AssistantSessionType.UNAUTHENTICATED_SESSION -> SecuritySessionType.OWNER
+}
+
+private fun AssistantSessionType.securitySessionType(): SecuritySessionType = when (this) {
+    AssistantSessionType.CALL_CONVERSATION_SESSION -> SecuritySessionType.CALL_CONVERSATION
+    AssistantSessionType.OWNER_SESSION,
+    AssistantSessionType.BACKGROUND_ASSISTANT_SESSION,
+    AssistantSessionType.UNAUTHENTICATED_SESSION -> SecuritySessionType.OWNER
+}
