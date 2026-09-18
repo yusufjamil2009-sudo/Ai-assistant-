@@ -7,7 +7,7 @@ plugins {
 android {
     namespace = "com.ustad.personalassistant"
     compileSdk = 36
-    defaultConfig { applicationId = "com.ustad.personalassistant"; minSdk = 26; targetSdk = 36; versionCode = 2; versionName = "0.1.1" }
+    defaultConfig { applicationId = "com.ustad.personalassistant"; minSdk = 26; targetSdk = 33; versionCode = 3; versionName = "0.1.2" }
     buildFeatures { compose = true; buildConfig = true }
     buildTypes {
         getByName("debug") {
