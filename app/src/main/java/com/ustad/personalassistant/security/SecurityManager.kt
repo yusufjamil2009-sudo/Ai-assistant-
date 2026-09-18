@@ -44,7 +44,7 @@ class SecurityManagerImpl(
             "back", "read_visible", "cancel", "read_messages", "read_notification",
             "summarize_messages", "send_message", "reply_message", "open_messaging_app",
             "read_email", "search_email", "summarize_email", "draft_email", "send_email",
-            "reply_email", "call_contact", "device_diagnostics", "settings", "search", "summarize"
+            "reply_email", "call_contact", "device_diagnostics", "settings", "search", "summarize", "accessibility"
         )
         return kind in allowed
     }
