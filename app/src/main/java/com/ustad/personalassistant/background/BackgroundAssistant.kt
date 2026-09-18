@@ -45,6 +45,8 @@ enum class BackgroundAssistantState { DISABLED, STARTING, ACTIVE, PAUSED, MIC_PE
 
 class BackgroundAssistantService : Service() {
     private val channelId = "ustad_background_assistant"
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+
     override fun onCreate() {
         super.onCreate()
         createChannel()
