@@ -6,7 +6,7 @@ import android.net.NetworkCapabilities
 
 class AndroidNetworkMonitor(context: Context) {
     private val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    fun state(): NetworkState {
+    fun isNetworkAvailable(): Boolean = state() != NetworkState.OFFLINE\n\n    fun state(): NetworkState {
         val network = connectivity.activeNetwork ?: return NetworkState.OFFLINE
         val caps = connectivity.getNetworkCapabilities(network) ?: return NetworkState.OFFLINE
         val connected = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
