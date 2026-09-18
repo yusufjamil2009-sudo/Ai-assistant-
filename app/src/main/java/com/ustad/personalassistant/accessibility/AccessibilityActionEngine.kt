@@ -26,6 +26,7 @@ interface AccessibilityActionEngine {
     fun verifyAction(expectedText: String? = null, timeoutMs: Long = 3_000L): AccessibilityActionResult<Unit>
     fun snapshot(): AccessibilityActionResult<ScreenSnapshot>
     fun currentPackageName(): String?
+    fun currentTargetAllowed(): Boolean
     fun cancelPendingOperations()
 }
 
@@ -55,6 +56,7 @@ class AndroidAccessibilityActionEngine(private val serviceProvider: () -> Advanc
     override fun verifyAction(expectedText: String?, timeoutMs: Long) = if (expectedText == null) success(Unit) else if (waitForNode(expectedText, timeoutMs).isSuccess) success(Unit) else failure(AccessibilityActionStatus.VERIFICATION_FAILED)
     override fun snapshot() = withAuthorizedService { service -> success(service.snapshot()) }
     override fun currentPackageName(): String? = serviceProvider()?.currentPackageName
+    override fun currentTargetAllowed(): Boolean = serviceProvider()?.targetAllowed() == true
     private fun authorized(packageName: String?): Boolean = !packageName.isNullOrBlank() && securityManager.isActionAuthorized("accessibility") && !securityManager.isProtectedApp(packageName)
     private fun <T> withService(block: (AdvancedAccessibilityService) -> AccessibilityActionResult<T>) = serviceProvider()?.let(block) ?: failure<T>(AccessibilityActionStatus.SERVICE_DISABLED)
     private fun <T> withAuthorizedService(block: (AdvancedAccessibilityService) -> AccessibilityActionResult<T>): AccessibilityActionResult<T> =
