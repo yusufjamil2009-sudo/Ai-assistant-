@@ -3,13 +3,45 @@
 ## Planned 8-part build
 
 1. Android foundation, profile and permissions — IMPLEMENTED
-2. Native incoming-call engine and 20-second auto-answer — NOT STARTED
+2. Native incoming-call engine and 20-second auto-answer — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
 3. Background call handling, lock-screen controls and JOIN CALL — NOT STARTED
 4. Live STT -> LLM -> TTS voice pipeline — NOT STARTED
 5. API Manager for Brain/STT/TTS providers, secure keys and testing — NOT STARTED
 6. Call intelligence and structured extraction — NOT STARTED
 7. Centered call summary and call history — NOT STARTED
 8. Full integration, device testing, hardening and release — NOT STARTED
+
+## Part 2 delivered
+
+- Native Android InCallService is registered for managed cellular calls.
+- The app can request the Android ROLE_DIALER role.
+- ACTION_DIAL is declared for the default-phone-app requirement.
+- Incoming ringing calls are captured by onCallAdded.
+- A 20-second timer is started for each ringing call.
+- If the user does not answer before the timer expires, the call is answered with audio-only state.
+- Manual Answer and Decline controls are provided.
+- Incoming-call status notification is posted.
+- Call state is cleared when the call is removed.
+- SMS/message-reading functionality remains absent.
+
+## Important scope boundary
+
+Part 2 does NOT claim that the AI can hear or speak to the caller. It only establishes the Android Telecom call-control layer. STT, LLM, TTS and live call audio belong to Part 4.
+
+## Verification status
+
+No physical SIM/device test has been completed in this environment.
+
+Part 2 must be physically tested on a real supported Android phone for:
+- saved contact caller
+- unknown caller
+- incoming ringing event
+- manual answer
+- manual decline
+- 20-second auto-answer
+- call removal/cleanup
+- locked screen behavior
+- OEM/Android-version differences
 
 ## Requirements that must remain
 
@@ -24,25 +56,9 @@
 - Call summary must contain caller identity/number, purpose, what caller said, what AI said, important points, duration and date/time.
 - Summary is a centered card, not a full-screen takeover, with a close button.
 
-## Part 1 verification status
-
-Source files have been added to the repository.
-
-A physical Android device test has NOT been claimed yet. Later testing must explicitly cover:
-- locked screen
-- screen off
-- saved contact
-- unknown caller
-- 20-second timeout
-- AI answer
-- JOIN CALL takeover
-- call termination
-- provider failure/fallback
-- different Android versions/device vendors
-
 ## Critical Android architecture note
 
-The production call engine must use Android Telecom APIs. Android documentation states that an app acting as the default phone app must handle ACTION_DIAL and fully implement InCallService for incoming and ongoing call UI. This will be addressed in Parts 2 and 3.
+Android documentation requires a default phone app to handle ACTION_DIAL and fully implement InCallService for incoming and ongoing call UI. Part 2 adds the incoming-call side; Part 3 will extend this for lock-screen/background controls and user takeover. Emergency calls continue to use the preloaded dialer.
 
 ## Completion rule
 
