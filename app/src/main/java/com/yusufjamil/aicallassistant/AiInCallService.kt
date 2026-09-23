@@ -12,6 +12,10 @@ import java.util.concurrent.Executors
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
+/**
+ * AI In-Call Service - handles incoming calls and manages the call lifecycle.
+ * This service implements the Android InCallService API.
+ */
 class AiInCallService : InCallService() {
     private val h = Handler(Looper.getMainLooper())
     private val timers = mutableMapOf<Call, Runnable>()
@@ -221,13 +225,11 @@ class AiInCallService : InCallService() {
     )
 
     private fun incoming() {
+        val callerDisplay = CallSession.callerName ?: CallSession.callerNumber ?: "Unknown"
         val b = NotificationCompat.Builder(this, CH)
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle("Incoming call")
-            .setContentText(
-                (CallSession.callerName ?: CallSession.callerNumber ?: "Unknown") +
-                    " • Auto-answer in 20 seconds"
-            )
+            .setContentText("$callerDisplay \u2022 Auto-answer in 20 seconds")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setOngoing(true)
             .setContentIntent(content())
@@ -237,12 +239,12 @@ class AiInCallService : InCallService() {
     }
 
     fun postActiveNotification() {
+        val callerDisplay = CallSession.callerName ?: CallSession.callerNumber ?: "Unknown"
         val b = NotificationCompat.Builder(this, CH)
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle("AI Call Assistant")
             .setContentText(
-                (if (CallSession.userJoined) "You joined the call" else "AI handling call") +
-                    " • " + CallSession.endpointType
+                (if (CallSession.userJoined) "You joined the call" else "AI handling call") + " \u2022 " + CallSession.endpointType
             )
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
@@ -288,6 +290,9 @@ class AiInCallService : InCallService() {
     }
 }
 
+/**
+ * Call session state - shared state for the current call.
+ */
 object CallSession {
     @Volatile var currentCall: Call? = null
     @Volatile var callerNumber: String? = null

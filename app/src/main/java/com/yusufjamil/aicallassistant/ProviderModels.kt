@@ -10,6 +10,9 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
+/**
+ * Secure storage for API keys using Android Keystore-backed encryption.
+ */
 object SecureApiKeyStore {
     private const val PREFS = "secure_api_keys"
     private const val KEY_ALIAS = "ai_call_assistant_api_keys_v1"
@@ -30,21 +33,23 @@ object SecureApiKeyStore {
         return generator.generateKey()
     }
 
-    fun save(context: Context, providerId: String, value: String) {
+    fun save(context: Context, providerId: String, fieldName: String, value: String) {
         if (value.isBlank()) return
         val iv = ByteArray(12).also { SecureRandom().nextBytes(it) }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key(), GCMParameterSpec(128, iv))
         val encrypted = cipher.doFinal(value.toByteArray(StandardCharsets.UTF_8))
+        val keyName = "${providerId}_$fieldName"
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .putString(providerId, Base64.encodeToString(iv, Base64.NO_WRAP) + ":" +
+            .putString(keyName, Base64.encodeToString(iv, Base64.NO_WRAP) + ":" +
                 Base64.encodeToString(encrypted, Base64.NO_WRAP))
             .apply()
     }
 
-    fun read(context: Context, providerId: String): String? {
+    fun read(context: Context, providerId: String, fieldName: String): String? {
+        val keyName = "${providerId}_$fieldName"
         val stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(providerId, null) ?: return null
+            .getString(keyName, null) ?: return null
         return try {
             val parts = stored.split(":")
             if (parts.size != 2) return null
@@ -59,48 +64,268 @@ object SecureApiKeyStore {
         }
     }
 
-    fun delete(context: Context, providerId: String) {
+    fun delete(context: Context, providerId: String, fieldName: String) {
+        val keyName = "${providerId}_$fieldName"
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
-            .remove(providerId).apply()
+            .remove(keyName).apply()
+    }
+
+    fun deleteAll(context: Context, providerId: String) {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val allKeys = prefs.all.keys.filter { it.startsWith("$providerId_") }
+        prefs.edit().apply {
+            allKeys.forEach { remove(it) }
+        }.apply()
     }
 }
 
+/**
+ * Result of checking if a provider has credentials configured.
+ */
 data class ProviderConnectionResult(
     val providerId: String,
     val success: Boolean,
-    val message: String
+    val message: String,
+    val status: ConnectionStatus = if (success) ConnectionStatus.CONNECTED else ConnectionStatus.NOT_CONFIGURED
 )
 
-data class ProviderConfig(
-    val id: String,
-    val category: ProviderCategory,
-    val displayName: String,
-    val supportsConnectionTest: Boolean = true
-)
-
+/**
+ * Provider categories.
+ */
 enum class ProviderCategory { BRAIN, STT, TTS }
 
+/**
+ * Catalog of all supported providers with their configurations.
+ */
 object ProviderCatalog {
-    val all = listOf(
-        ProviderConfig("groq", ProviderCategory.BRAIN, "Groq"),
-        ProviderConfig("gemini", ProviderCategory.BRAIN, "Gemini"),
-        ProviderConfig("sambanova", ProviderCategory.BRAIN, "SambaNova"),
-        ProviderConfig("zhipu", ProviderCategory.BRAIN, "Zhipu"),
-        ProviderConfig("mistral", ProviderCategory.BRAIN, "Mistral"),
-        ProviderConfig("openrouter", ProviderCategory.BRAIN, "OpenRouter"),
-        ProviderConfig("deepgram", ProviderCategory.STT, "Deepgram"),
-        ProviderConfig("google_stt", ProviderCategory.STT, "Google Cloud Speech-to-Text"),
-        ProviderConfig("assemblyai", ProviderCategory.STT, "AssemblyAI"),
-        ProviderConfig("elevenlabs_scribe", ProviderCategory.STT, "ElevenLabs Scribe"),
-        ProviderConfig("groq_whisper", ProviderCategory.STT, "Groq Whisper"),
-        ProviderConfig("mistral_voxtral", ProviderCategory.STT, "Mistral Voxtral"),
-        ProviderConfig("openai_whisper", ProviderCategory.STT, "OpenAI Whisper/API"),
-        ProviderConfig("elevenlabs", ProviderCategory.TTS, "ElevenLabs"),
-        ProviderConfig("google_tts", ProviderCategory.TTS, "Google Cloud TTS"),
-        ProviderConfig("azure_speech", ProviderCategory.TTS, "Microsoft Azure Speech"),
-        ProviderConfig("amazon_polly", ProviderCategory.TTS, "Amazon Polly"),
-        ProviderConfig("fish_audio", ProviderCategory.TTS, "Fish Audio"),
-        ProviderConfig("cartesia", ProviderCategory.TTS, "Cartesia"),
-        ProviderConfig("rime", ProviderCategory.TTS, "Rime")
+    
+    // Brain / LLM Providers (6)
+    val groq = ProviderConfig(
+        id = "groq",
+        category = ProviderCategory.BRAIN,
+        displayName = "GROQ",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Groq API key")
+        ),
+        defaultModel = "llama-3.3-70b-versatile"
     )
+    
+    val googleGemini = ProviderConfig(
+        id = "gemini",
+        category = ProviderCategory.BRAIN,
+        displayName = "GOOGLE GEMINI",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Google Gemini API key")
+        ),
+        defaultModel = "gemini-2.5-flash"
+    )
+    
+    val sambanova = ProviderConfig(
+        id = "sambanova",
+        category = ProviderCategory.BRAIN,
+        displayName = "SAMBANOVA",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your SambaNova API key")
+        ),
+        defaultModel = "Meta-Llama-3.1-405B-Instruct"
+    )
+    
+    val zhipu = ProviderConfig(
+        id = "zhipu",
+        category = ProviderCategory.BRAIN,
+        displayName = "Z.AI / ZHIPU",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Z.AI / Zhipu API key")
+        ),
+        defaultModel = "glm-4.6"
+    )
+    
+    val mistral = ProviderConfig(
+        id = "mistral",
+        category = ProviderCategory.BRAIN,
+        displayName = "MISTRAL AI",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Mistral AI API key")
+        ),
+        defaultModel = "mistral-small-latest"
+    )
+    
+    val openrouter = ProviderConfig(
+        id = "openrouter",
+        category = ProviderCategory.BRAIN,
+        displayName = "OPENROUTER",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your OpenRouter API key")
+        ),
+        defaultModel = "openai/gpt-oss-20b"
+    )
+    
+    // STT / Speech-to-Text Providers (7)
+    val deepgram = ProviderConfig(
+        id = "deepgram",
+        category = ProviderCategory.STT,
+        displayName = "DEEPGRAM",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Deepgram API key")
+        )
+    )
+    
+    val googleCloudStt = ProviderConfig(
+        id = "google_stt",
+        category = ProviderCategory.STT,
+        displayName = "GOOGLE CLOUD SPEECH-TO-TEXT",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Google Cloud STT API key")
+        )
+    )
+    
+    val assemblyai = ProviderConfig(
+        id = "assemblyai",
+        category = ProviderCategory.STT,
+        displayName = "ASSEMBLYAI",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your AssemblyAI API key")
+        )
+    )
+    
+    val elevenlabsScribe = ProviderConfig(
+        id = "elevenlabs_scribe",
+        category = ProviderCategory.STT,
+        displayName = "ELEVENLABS SCRIBE",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your ElevenLabs API key", "xi-api-key")
+        )
+    )
+    
+    val groqWhisper = ProviderConfig(
+        id = "groq_whisper",
+        category = ProviderCategory.STT,
+        displayName = "GROQ WHISPER",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Groq API key")
+        )
+    )
+    
+    val mistralVoxtral = ProviderConfig(
+        id = "mistral_voxtral",
+        category = ProviderCategory.STT,
+        displayName = "MISTRAL VOXTRAL",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Mistral API key")
+        )
+    )
+    
+    val openaiWhisper = ProviderConfig(
+        id = "openai_whisper",
+        category = ProviderCategory.STT,
+        displayName = "OPENAI WHISPER / OPENAI SPEECH-TO-TEXT",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your OpenAI API key")
+        )
+    )
+    
+    // TTS / Text-to-Speech Providers (7)
+    val elevenlabs = ProviderConfig(
+        id = "elevenlabs",
+        category = ProviderCategory.TTS,
+        displayName = "ELEVENLABS",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your ElevenLabs API key", "xi-api-key")
+        )
+    )
+    
+    val googleCloudTts = ProviderConfig(
+        id = "google_tts",
+        category = ProviderCategory.TTS,
+        displayName = "GOOGLE CLOUD TEXT-TO-SPEECH",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Google Cloud TTS API key")
+        )
+    )
+    
+    val azureSpeech = ProviderConfig(
+        id = "azure_speech",
+        category = ProviderCategory.TTS,
+        displayName = "MICROSOFT AZURE SPEECH",
+        credentialFields = listOf(
+            CredentialField("api_key", "Azure Speech API Key", true, "Enter your Azure Speech API key"),
+            CredentialField("region", "Azure Region", false, "centralindia", "^[a-z0-9-]+$")
+        )
+    )
+    
+    val amazonPolly = ProviderConfig(
+        id = "amazon_polly",
+        category = ProviderCategory.TTS,
+        displayName = "AMAZON POLLY",
+        credentialFields = listOf(
+            CredentialField("access_key_id", "AWS Access Key ID", true, "Enter your AWS Access Key ID"),
+            CredentialField("secret_access_key", "AWS Secret Access Key", true, "Enter your AWS Secret Access Key"),
+            CredentialField("region", "AWS Region", false, "us-east-1", "^[a-z0-9-]+$")
+        )
+    )
+    
+    val fishAudio = ProviderConfig(
+        id = "fish_audio",
+        category = ProviderCategory.TTS,
+        displayName = "FISH AUDIO",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Fish Audio API key")
+        )
+    )
+    
+    val cartesia = ProviderConfig(
+        id = "cartesia",
+        category = ProviderCategory.TTS,
+        displayName = "CARTESIA",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Cartesia API key")
+        )
+    )
+    
+    val rime = ProviderConfig(
+        id = "rime",
+        category = ProviderCategory.TTS,
+        displayName = "RIME",
+        credentialFields = listOf(
+            CredentialField("api_key", "API Key", true, "Enter your Rime API key")
+        )
+    )
+    
+    // All providers grouped by category
+    val brainProviders: List<ProviderConfig> = listOf(
+        groq, googleGemini, sambanova, zhipu, mistral, openrouter
+    )
+    
+    val sttProviders: List<ProviderConfig> = listOf(
+        deepgram, googleCloudStt, assemblyai, elevenlabsScribe, groqWhisper, mistralVoxtral, openaiWhisper
+    )
+    
+    val ttsProviders: List<ProviderConfig> = listOf(
+        elevenlabs, googleCloudTts, azureSpeech, amazonPolly, fishAudio, cartesia, rime
+    )
+    
+    // All providers in one list
+    val all: List<ProviderConfig> = brainProviders + sttProviders + ttsProviders
+    
+    /**
+     * Get a provider by its ID.
+     */
+    fun getById(id: String): ProviderConfig? = all.firstOrNull { it.id == id }
+    
+    /**
+     * Get providers by category.
+     */
+    fun getByCategory(category: ProviderCategory): List<ProviderConfig> = when (category) {
+        ProviderCategory.BRAIN -> brainProviders
+        ProviderCategory.STT -> sttProviders
+        ProviderCategory.TTS -> ttsProviders
+    }
+}
+
+/**
+ * Helper to mask API keys for display.
+ */
+fun maskApiKey(key: String): String {
+    if (key.length <= 4) return "••••"
+    return "•".repeat(key.length - 4) + key.takeLast(4)
 }
