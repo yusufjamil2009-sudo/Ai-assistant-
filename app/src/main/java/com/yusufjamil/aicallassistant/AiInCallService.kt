@@ -129,12 +129,12 @@ class AiInCallService : InCallService() {
 
     override fun onAvailableCallEndpointsChanged(endpoints: MutableList<CallEndpoint>) {
         super.onAvailableCallEndpointsChanged(endpoints)
-        CallSession.availableEndpointTypes = endpoints.map { endpointName(it.type) }
+        CallSession.availableEndpointTypes = endpoints.map { endpointName(it.endpointType) }
     }
 
     override fun onCallEndpointChanged(endpoint: CallEndpoint) {
         super.onCallEndpointChanged(endpoint)
-        CallSession.endpointType = endpointName(endpoint.type)
+        CallSession.endpointType = endpointName(endpoint.endpointType)
         postActiveNotification()
     }
 
