@@ -4,44 +4,45 @@
 
 1. Android foundation, profile and permissions — IMPLEMENTED
 2. Native incoming-call engine and 20-second auto-answer — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
-3. Background call handling, lock-screen controls and JOIN CALL — NOT STARTED
+3. Background call handling, lock-screen controls and JOIN CALL — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
 4. Live STT -> LLM -> TTS voice pipeline — NOT STARTED
 5. API Manager for Brain/STT/TTS providers, secure keys and testing — NOT STARTED
 6. Call intelligence and structured extraction — NOT STARTED
 7. Centered call summary and call history — NOT STARTED
 8. Full integration, device testing, hardening and release — NOT STARTED
 
-## Part 2 delivered
+## Part 3 delivered
 
-- Native Android InCallService is registered for managed cellular calls.
-- The app can request the Android ROLE_DIALER role.
-- ACTION_DIAL is declared for the default-phone-app requirement.
-- Incoming ringing calls are captured by onCallAdded.
-- A 20-second timer is started for each ringing call.
-- If the user does not answer before the timer expires, the call is answered with audio-only state.
-- Manual Answer and Decline controls are provided.
-- Incoming-call status notification is posted.
-- Call state is cleared when the call is removed.
+- Active call controls are available from a notification-launched activity.
+- The incoming-call activity is configured to appear over the lock screen and wake the screen.
+- Active-call notification remains ongoing so the user can return to call controls without opening the main app.
+- JOIN CALL control is wired to the active Telecom Call.
+- LISTEN is represented as a call-control state for the later AI audio layer.
+- MUTE/UNMUTE control is wired to InCallService microphone mute.
+- END CALL disconnects the active Telecom Call.
+- Call session state is cleaned when Telecom removes the call.
 - SMS/message-reading functionality remains absent.
 
 ## Important scope boundary
 
-Part 2 does NOT claim that the AI can hear or speak to the caller. It only establishes the Android Telecom call-control layer. STT, LLM, TTS and live call audio belong to Part 4.
+Part 3 provides real Telecom call control and UI/background entry points. It does NOT yet provide a separate AI audio bridge that can listen to caller audio or inject synthesized speech. That belongs to Part 4 and must be implemented with supported Android call-audio APIs and tested on physical devices.
 
 ## Verification status
 
 No physical SIM/device test has been completed in this environment.
 
-Part 2 must be physically tested on a real supported Android phone for:
-- saved contact caller
-- unknown caller
-- incoming ringing event
-- manual answer
-- manual decline
-- 20-second auto-answer
-- call removal/cleanup
-- locked screen behavior
-- OEM/Android-version differences
+Part 3 must be physically tested on a real supported Android phone for:
+- locked screen incoming call
+- screen-off incoming call
+- notification tap while locked
+- JOIN CALL takeover
+- LISTEN control state
+- MUTE/UNMUTE
+- END CALL
+- manual answer before timeout
+- auto-answer after 20 seconds
+- notification persistence/cleanup
+- OEM/Android-version behavior
 
 ## Requirements that must remain
 
@@ -58,7 +59,7 @@ Part 2 must be physically tested on a real supported Android phone for:
 
 ## Critical Android architecture note
 
-Android documentation requires a default phone app to handle ACTION_DIAL and fully implement InCallService for incoming and ongoing call UI. Part 2 adds the incoming-call side; Part 3 will extend this for lock-screen/background controls and user takeover. Emergency calls continue to use the preloaded dialer.
+Android's InCallService API provides call lifecycle and call-control callbacks. Current Android documentation deprecates the older audio-route API at API 34 in favor of CallEndpoint APIs. Part 3 therefore keeps the call-control layer separate from the future AI audio bridge instead of pretending that a normal microphone recorder can transparently become the cellular call audio path.
 
 ## Completion rule
 
