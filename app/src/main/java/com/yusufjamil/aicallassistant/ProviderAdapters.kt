@@ -58,7 +58,15 @@ private fun gemini(key:String,p:String):String{
 }
 
 private val DeepgramAdapter=object:ProviderAdapter{override val id="deepgram";override fun test(c:Context)=k(c,id)?.let{req("https://api.deepgram.com/v1/projects",it,header="Authorization").let{r->if(r.success)r else r}}?:ApiTestResult(false,"Not Connected","API key is not configured")}
-private val GoogleSttAdapter=object:ProviderAdapter{override val id="google_stt";override fun test(c:Context)=k(c,id)?.let{req("https://speech.googleapis.com/v1/speech:recognize?key="+java.net.URLEncoder.encode(it,"UTF-8"),"", "POST",JSONObject().put("config",JSONObject().put("encoding","LINEAR16")).put("audio",JSONObject().put("content","")).toString())}?:ApiTestResult(false,"Not Connected","API key is not configured")}
+private val GoogleSttAdapter=object:ProviderAdapter{
+ override val id="google_stt"
+ override fun test(c:Context)=k(c,id)?.let{key->
+  val pcm=ByteArray(3200)
+  val audio=android.util.Base64.encodeToString(pcm,android.util.Base64.NO_WRAP)
+  req("https://speech.googleapis.com/v1/speech:recognize?key="+java.net.URLEncoder.encode(key,"UTF-8"),"","POST",
+   JSONObject().put("config",JSONObject().put("encoding","LINEAR16").put("sampleRateHertz",16000).put("languageCode","en-US")).put("audio",JSONObject().put("content",audio)).toString())
+ }?:ApiTestResult(false,"Not Connected","API key is not configured")
+}
 private val AssemblyAiAdapter=object:ProviderAdapter{override val id="assemblyai";override fun test(c:Context)=k(c,id)?.let{req("https://api.assemblyai.com/v2/transcript",it)}?:ApiTestResult(false,"Not Connected","API key is not configured")}
 private val ElevenLabsScribeAdapter=object:ProviderAdapter{override val id="elevenlabs_scribe";override fun test(c:Context)=k(c,id)?.let{req("https://api.elevenlabs.io/v1/models",it,header="xi-api-key")}?:ApiTestResult(false,"Not Connected","API key is not configured")}
 private val GroqWhisperAdapter=object:ProviderAdapter{override val id="groq_whisper";override fun test(c:Context)=k(c,id)?.let{req("https://api.groq.com/openai/v1/models",it)}?:ApiTestResult(false,"Not Connected","API key is not configured")}
@@ -66,7 +74,13 @@ private val MistralVoxtralAdapter=object:ProviderAdapter{override val id="mistra
 private val OpenAiWhisperAdapter=object:ProviderAdapter{override val id="openai_whisper";override fun test(c:Context)=k(c,id)?.let{req("https://api.openai.com/v1/models",it)}?:ApiTestResult(false,"Not Connected","API key is not configured")}
 private val ElevenLabsTtsAdapter=object:ProviderAdapter{override val id="elevenlabs";override fun test(c:Context)=k(c,id)?.let{req("https://api.elevenlabs.io/v1/models",it,header="xi-api-key")}?:ApiTestResult(false,"Not Connected","API key is not configured")}
 private val GoogleTtsAdapter=object:ProviderAdapter{override val id="google_tts";override fun test(c:Context)=k(c,id)?.let{req("https://texttospeech.googleapis.com/v1/voices?key="+java.net.URLEncoder.encode(it,"UTF-8"),"")}?:ApiTestResult(false,"Not Connected","API key is not configured")}
-private val AzureSpeechAdapter=object:ProviderAdapter{override val id="azure_speech";override fun test(c:Context)=k(c,id)?.let{req("https://centralindia.api.cognitive.microsoft.com/sts/v1.0/issueToken",it,"POST",null,"Ocp-Apim-Subscription-Key")}?:ApiTestResult(false,"Not Connected","API key is not configured")}
+private val AzureSpeechAdapter=object:ProviderAdapter{
+ override val id="azure_speech"
+ override fun test(c:Context)=k(c,id)?.let{key->
+  val region=AppSettings.azureRegion(c)
+  req("https://$region.api.cognitive.microsoft.com/sts/v1.0/issueToken",key,"POST",null,"Ocp-Apim-Subscription-Key")
+ }?:ApiTestResult(false,"Not Connected","API key is not configured")
+}
 private val AmazonPollyAdapter=object:ProviderAdapter{override val id="amazon_polly";override fun test(c:Context)=ApiTestResult(false,"Credentials Required","AWS Polly needs access-key + secret-key signing; this adapter is present and explicitly blocks unsafe one-field authentication")}
 private val FishAudioAdapter=object:ProviderAdapter{override val id="fish_audio";override fun test(c:Context)=k(c,id)?.let{req("https://api.fish.audio/v1/models",it,"GET",null,"Authorization")}?:ApiTestResult(false,"Not Connected","API key is not configured")}
 private val CartesiaAdapter=object:ProviderAdapter{override val id="cartesia";override fun test(c:Context)=k(c,id)?.let{req("https://api.cartesia.ai/tts/bytes",it,"POST",JSONObject().put("model_id","sonic-2").put("transcript","OK").put("voice",JSONObject().put("mode","id").put("id","694f9389-aacb-45b6-b726-9d9369183238")).put("output_format",JSONObject().put("container","wav").put("encoding","pcm_s16le").put("sample_rate",16000)).toString(),"X-API-Key")}?:ApiTestResult(false,"Not Connected","API key is not configured")}
