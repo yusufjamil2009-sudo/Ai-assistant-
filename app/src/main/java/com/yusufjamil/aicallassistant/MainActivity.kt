@@ -154,6 +154,39 @@ private fun PartTwoSetupScreen(
             }
         )
 
+        ApiManagerScreen()
+
         Text("SMS/message reading is not requested or declared by this project.")
+    }
+}
+
+@Composable
+private fun ApiManagerScreen() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val manager = remember { ApiManager(context) }
+    var selected by remember { mutableStateOf(ProviderCatalog.all.first()) }
+    var key by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf("Not Connected") }
+    var primary by remember { mutableStateOf("groq") }
+    var backup by remember { mutableStateOf("gemini") }
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("API Manager", style = MaterialTheme.typography.titleLarge)
+            Text("Secure API keys • Brain / STT / TTS")
+            OutlinedTextField(value = selected.displayName, onValueChange = {}, readOnly = true, modifier = Modifier.fillMaxWidth(), label = { Text("Selected provider") })
+            OutlinedTextField(value = key, onValueChange = { key = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Paste API key") }, singleLine = true)
+            Button(onClick = { manager.saveKey(selected.id, key); key = ""; status = "Saved securely" }, modifier = Modifier.fillMaxWidth()) { Text("SAVE KEY") }
+            Button(onClick = { status = manager.keyConfigured(selected.id).message }, modifier = Modifier.fillMaxWidth()) { Text("CHECK KEY") }
+            Text("Status: $status")
+            Text("Primary: $primary")
+            Text("Backup: $backup")
+            Button(onClick = { primary = selected.id }, modifier = Modifier.fillMaxWidth()) { Text("SET AS PRIMARY") }
+            Button(onClick = { backup = selected.id }, modifier = Modifier.fillMaxWidth()) { Text("SET AS BACKUP") }
+            ProviderCatalog.all.forEach { p ->
+                Button(onClick = { selected = p; status = if (manager.hasKey(p.id)) "Key stored" else "Not Connected" }, modifier = Modifier.fillMaxWidth()) {
+                    Text(p.displayName + " • " + p.category)
+                }
+            }
+        }
     }
 }
