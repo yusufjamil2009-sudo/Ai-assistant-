@@ -5,44 +5,44 @@
 1. Android foundation, profile and permissions — IMPLEMENTED
 2. Native incoming-call engine and 20-second auto-answer — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
 3. Background call handling, lock-screen controls and JOIN CALL — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
-4. Live STT -> LLM -> TTS voice pipeline — NOT STARTED
+4. Live STT -> LLM -> TTS voice pipeline — ORCHESTRATION IMPLEMENTED; CELLULAR AUDIO BRIDGE + PROVIDERS PENDING
 5. API Manager for Brain/STT/TTS providers, secure keys and testing — NOT STARTED
 6. Call intelligence and structured extraction — NOT STARTED
 7. Centered call summary and call history — NOT STARTED
 8. Full integration, device testing, hardening and release — NOT STARTED
 
-## Part 3 delivered
+## Part 4 delivered
 
-- Active call controls are available from a notification-launched activity.
-- The incoming-call activity is configured to appear over the lock screen and wake the screen.
-- Active-call notification remains ongoing so the user can return to call controls without opening the main app.
-- JOIN CALL control is wired to the active Telecom Call.
-- LISTEN is represented as a call-control state for the later AI audio layer.
-- MUTE/UNMUTE control is wired to InCallService microphone mute.
-- END CALL disconnects the active Telecom Call.
-- Call session state is cleaned when Telecom removes the call.
-- SMS/message-reading functionality remains absent.
+- Added a dedicated LiveVoiceEngine boundary for STT -> LLM -> TTS orchestration.
+- Connected automatic call-answer lifecycle to the voice engine.
+- Added explicit voice-engine states so later provider failures can be surfaced instead of silently inventing responses.
+- Added transcript and assistant-response state holders for the later AI pipeline.
+- Connected service lifecycle cleanup to stop the voice engine.
+- Preserved the no-SMS requirement.
 
-## Important scope boundary
+## Critical limitation — not falsely marked complete
 
-Part 3 provides real Telecom call control and UI/background entry points. It does NOT yet provide a separate AI audio bridge that can listen to caller audio or inject synthesized speech. That belongs to Part 4 and must be implemented with supported Android call-audio APIs and tested on physical devices.
+Part 4 does NOT claim that a normal Android microphone recorder can transparently capture the remote side of a SIM/cellular call and inject TTS into that call. Android's InCallService API provides call control and call endpoints, but it does not expose a general-purpose remote cellular-call PCM stream to an ordinary default dialer. Current Android documentation also points developers to CallEndpoint APIs for call-media endpoints. Therefore the actual cellular audio bridge must be validated against supported Android/device capabilities before claiming end-to-end AI speech.
+
+Part 5 will provide the real STT/LLM/TTS provider clients, secure API-key management, fallback routing and connection tests. The final end-to-end cellular voice path remains a physical-device validation item.
 
 ## Verification status
 
 No physical SIM/device test has been completed in this environment.
 
-Part 3 must be physically tested on a real supported Android phone for:
-- locked screen incoming call
-- screen-off incoming call
-- notification tap while locked
+Required later tests:
+- saved contact caller
+- unknown caller
+- 20-second auto-answer
+- AI voice start/stop lifecycle
+- actual supported call-audio input path
+- STT latency and accuracy
+- LLM response latency/fallback
+- TTS playback into the supported call path
 - JOIN CALL takeover
-- LISTEN control state
-- MUTE/UNMUTE
-- END CALL
-- manual answer before timeout
-- auto-answer after 20 seconds
-- notification persistence/cleanup
-- OEM/Android-version behavior
+- lock-screen/screen-off behavior
+- provider failure/fallback
+- call termination cleanup
 
 ## Requirements that must remain
 
@@ -56,10 +56,6 @@ Part 3 must be physically tested on a real supported Android phone for:
 - API Manager must support provider keys, connection tests, secure storage, primary/backup selection and failure handling.
 - Call summary must contain caller identity/number, purpose, what caller said, what AI said, important points, duration and date/time.
 - Summary is a centered card, not a full-screen takeover, with a close button.
-
-## Critical Android architecture note
-
-Android's InCallService API provides call lifecycle and call-control callbacks. Current Android documentation deprecates the older audio-route API at API 34 in favor of CallEndpoint APIs. Part 3 therefore keeps the call-control layer separate from the future AI audio bridge instead of pretending that a normal microphone recorder can transparently become the cellular call audio path.
 
 ## Completion rule
 
