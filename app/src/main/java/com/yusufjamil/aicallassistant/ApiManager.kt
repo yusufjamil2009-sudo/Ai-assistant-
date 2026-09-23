@@ -1,7 +1,6 @@
 package com.yusufjamil.aicallassistant
 
 import android.content.Context
-import kotlinx.coroutines.runBlocking
 
 /**
  * API Manager for managing provider credentials and connections.
@@ -60,9 +59,27 @@ class ApiManager(private val context: Context) {
      * Test a providers connection.
      */
     fun testConnection(providerId: String): ConnectionStatus {
-        val provider = getProviderById(providerId) ?: return ConnectionStatus.NOT_CONFIGURED
-        return runBlocking {
-            provider.testConnection(context)
+        val result = ProviderAdapters.test(context, providerId)
+        return when {
+            result.success -> ConnectionStatus.CONNECTED
+            result.status.equals("Invalid", ignoreCase = true) ->
+                ConnectionStatus.INVALID_KEY
+            result.status.contains("Rate Limit", ignoreCase = true) ->
+                ConnectionStatus.RATE_LIMITED
+            result.status.contains("Quota", ignoreCase = true) ->
+                ConnectionStatus.QUOTA_EXCEEDED
+            result.status.contains("Network", ignoreCase = true) ->
+                ConnectionStatus.NETWORK_ERROR
+            result.status.contains("Server", ignoreCase = true) ->
+                ConnectionStatus.SERVER_ERROR
+            result.status.contains("Not Connected", ignoreCase = true) ||
+                result.status.contains("Not Configured", ignoreCase = true) ->
+                ConnectionStatus.NOT_CONFIGURED
+            result.status.contains("Credentials Required", ignoreCase = true) ->
+                ConnectionStatus.CONFIGURATION_ERROR
+            result.status.contains("Unsupported", ignoreCase = true) ->
+                ConnectionStatus.UNSUPPORTED
+            else -> ConnectionStatus.ERROR
         }
     }
     
