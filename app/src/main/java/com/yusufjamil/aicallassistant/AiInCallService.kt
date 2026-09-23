@@ -14,6 +14,16 @@ import androidx.core.app.NotificationManagerCompat
 
 class AiInCallService : InCallService() {
 
+    override fun onCreate() {
+        super.onCreate()
+        AiCallServiceHolder.service = this
+    }
+
+    override fun onDestroy() {
+        if (AiCallServiceHolder.service === this) AiCallServiceHolder.service = null
+        super.onDestroy()
+    }
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val sessions = mutableMapOf<Call, Runnable>()
 
@@ -32,6 +42,7 @@ class AiInCallService : InCallService() {
                     call.answer(0)
                     CallSession.autoAnswered = true
                     CallSession.status = "AI HANDLING"
+                    LiveVoiceEngine.startForCurrentCall(this)
                     postActiveNotification()
                 }
             }
@@ -48,6 +59,7 @@ class AiInCallService : InCallService() {
         sessions.remove(call)?.let(mainHandler::removeCallbacks)
 
         if (CallSession.currentCall === call) {
+            LiveVoiceEngine.stop()
             CallSession.status = "ENDED"
             CallSession.currentCall = null
             CallSession.callerNumber = null
@@ -77,6 +89,7 @@ class AiInCallService : InCallService() {
         }
         CallSession.userJoined = true
         CallSession.status = "USER JOINED"
+        LiveVoiceEngine.stop()
         postActiveNotification()
     }
 
