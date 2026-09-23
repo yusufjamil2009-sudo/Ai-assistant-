@@ -6,10 +6,18 @@
 2. Native incoming-call engine and 20-second auto-answer — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
 3. Background call handling, lock-screen controls and JOIN CALL — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
 4. Live STT -> LLM -> TTS voice pipeline — ORCHESTRATION IMPLEMENTED; CELLULAR AUDIO BRIDGE + PROVIDERS PENDING
-5. API Manager for Brain/STT/TTS providers, secure keys and testing — NOT STARTED
+5. API Manager for Brain/STT/TTS providers, secure keys and testing — FOUNDATION IMPLEMENTED; PROVIDER ADAPTERS/UI PENDING
 6. Call intelligence and structured extraction — NOT STARTED
 7. Centered call summary and call history — NOT STARTED
 8. Full integration, device testing, hardening and release — NOT STARTED
+
+## Part 5 delivered
+
+- Added requested Brain, STT and TTS provider catalog.
+- Added Android Keystore-backed AES-GCM encrypted API-key storage.
+- Added ApiManager save/read/delete and secure key-presence checks.
+- No API keys are hard-coded or committed.
+- Real provider adapters, Connect/Test UI, primary/backup routing and quota/error handling remain pending.
 
 ## Part 4 delivered
 
