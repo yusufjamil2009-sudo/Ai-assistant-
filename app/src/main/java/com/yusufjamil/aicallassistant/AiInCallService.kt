@@ -8,12 +8,14 @@ import android.os.Looper
 import android.telecom.Call
 import android.telecom.CallEndpoint
 import android.telecom.InCallService
+import java.util.concurrent.Executors
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 
 class AiInCallService : InCallService() {
     private val h = Handler(Looper.getMainLooper())
     private val timers = mutableMapOf<Call, Runnable>()
+    private val analysisExecutor = Executors.newSingleThreadExecutor()
 
     override fun onCreate() {
         super.onCreate()
@@ -24,6 +26,7 @@ class AiInCallService : InCallService() {
     override fun onDestroy() {
         timers.values.forEach(h::removeCallbacks)
         timers.clear()
+        analysisExecutor.shutdownNow()
         if (AiCallServiceHolder.service === this) AiCallServiceHolder.service = null
         super.onDestroy()
     }
@@ -61,39 +64,63 @@ class AiInCallService : InCallService() {
         timers.remove(call)?.let(h::removeCallbacks)
         if (CallSession.currentCall === call) {
             LiveVoiceEngine.stop()
-            val d = ((System.currentTimeMillis() - CallSession.startedAt).coerceAtLeast(0)) / 1000
-            val i = CallIntelligenceEngine.analyzeWithAi(
-                this,
-                CallSession.callerNumber,
-                CallSession.callerName,
-                CallSession.savedContact,
-                LiveVoiceEngine.lastTranscript,
-                LiveVoiceEngine.lastResponse
-            )
-            val s = CallSummary(
-                System.currentTimeMillis(),
-                CallSession.callerName,
-                CallSession.callerNumber,
-                CallSession.savedContact,
-                i.purpose,
-                i.category.name,
-                i.callerSaid,
-                i.assistantSaid,
-                i.importantPoints,
-                d,
-                CallSession.startedAt
-            )
-            CallHistoryStore(this).save(s)
-            startActivity(
-                Intent(this, CallSummaryActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    putExtra(CallSummaryActivity.EXTRA_ID, s.id)
-                }
-            )
+
+            // Capture the session before doing any network/JSON work. InCallService callbacks
+            // run on the main thread; provider calls must never block that thread.
+            val appContext = applicationContext
+            val id = System.currentTimeMillis()
+            val callerName = CallSession.callerName
+            val callerNumber = CallSession.callerNumber
+            val savedContact = CallSession.savedContact
+            val startedAt = CallSession.startedAt
+            val callerText = LiveVoiceEngine.lastTranscript
+            val assistantText = LiveVoiceEngine.lastResponse
+            val durationSeconds =
+                ((System.currentTimeMillis() - startedAt).coerceAtLeast(0L)) / 1000L
+
             CallSession.reset()
             ended()
+
+            analysisExecutor.execute {
+                val intelligence = CallIntelligenceEngine.analyzeWithAi(
+                    appContext,
+                    callerNumber,
+                    callerName,
+                    savedContact,
+                    callerText,
+                    assistantText
+                )
+                val summary = CallSummary(
+                    id,
+                    callerName,
+                    callerNumber,
+                    savedContact,
+                    intelligence.purpose,
+                    intelligence.category.name,
+                    intelligence.callerSaid,
+                    intelligence.assistantSaid,
+                    intelligence.importantPoints,
+                    durationSeconds,
+                    startedAt
+                )
+                CallHistoryStore(appContext).save(summary)
+
+                // The summary UI is launched only after persistence/analysis completes.
+                runOnMainThread {
+                    startActivity(
+                        Intent(this, CallSummaryActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            putExtra(CallSummaryActivity.EXTRA_ID, summary.id)
+                        }
+                    )
+                }
+            }
         }
         super.onCallRemoved(call)
+    }
+
+    private fun runOnMainThread(action: () -> Unit) {
+        h.post(action)
     }
 
     override fun onAvailableCallEndpointsChanged(endpoints: MutableList<CallEndpoint>) {
