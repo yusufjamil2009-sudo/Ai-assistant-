@@ -26,6 +26,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import java.util.concurrent.Executors
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -47,6 +49,7 @@ class MainActivity : ComponentActivity() {
                     topBar = { TopAppBar(title = { Text("AI Call Assistant") }) }
                 ) { padding ->
                     PartTwoSetupScreen(
+                        onOpenHistory = { startActivity(android.content.Intent(this@MainActivity, CallHistoryActivity::class.java)) },
                         modifier = Modifier.padding(padding),
                         isDefaultDialer = isDefaultDialer(),
                         onRequestPermissions = ::requestRequiredPermissions,
@@ -89,14 +92,17 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 private fun PartTwoSetupScreen(
+    onOpenHistory: () -> Unit,
     modifier: Modifier = Modifier,
     isDefaultDialer: Boolean,
     onRequestPermissions: () -> Unit,
     onRequestDialerRole: () -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var language by remember { mutableStateOf("English") }
-    var voice by remember { mutableStateOf("Female") }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var name by remember { mutableStateOf(AppSettings.name(context)) }
+    var language by remember { mutableStateOf(AppSettings.language(context)) }
+    var voice by remember { mutableStateOf(AppSettings.voice(context)) }
+    LaunchedEffect(name, language, voice) { AppSettings.saveProfile(context, name, language, voice) }
 
     Column(
         modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
@@ -156,6 +162,7 @@ private fun PartTwoSetupScreen(
 
         ApiManagerScreen()
 
+        Button(onClick = onOpenHistory, modifier = Modifier.fillMaxWidth()) { Text("CALL HISTORY") }
         Text("SMS/message reading is not requested or declared by this project.")
     }
 }
@@ -167,8 +174,9 @@ private fun ApiManagerScreen() {
     var selected by remember { mutableStateOf(ProviderCatalog.all.first()) }
     var key by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Not Connected") }
-    var primary by remember { mutableStateOf("groq") }
-    var backup by remember { mutableStateOf("gemini") }
+    var primary by remember { mutableStateOf(AppSettings.primary(context)) }
+    var backup by remember { mutableStateOf(AppSettings.backup(context)) }
+    var testing by remember { mutableStateOf(false) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text("API Manager", style = MaterialTheme.typography.titleLarge)
@@ -177,11 +185,12 @@ private fun ApiManagerScreen() {
             OutlinedTextField(value = key, onValueChange = { key = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Paste API key") }, singleLine = true)
             Button(onClick = { manager.saveKey(selected.id, key); key = ""; status = "Saved securely" }, modifier = Modifier.fillMaxWidth()) { Text("SAVE KEY") }
             Button(onClick = { status = manager.keyConfigured(selected.id).message }, modifier = Modifier.fillMaxWidth()) { Text("CHECK KEY") }
+            Button(enabled = !testing, onClick = { testing = true; status = "Testing..."; Executors.newSingleThreadExecutor().execute { val result = ProviderApiClient.test(context, selected.id); runOnUiThread { status = result.status + ": " + result.detail; testing = false } } }, modifier = Modifier.fillMaxWidth()) { Text("TEST API") }
             Text("Status: $status")
             Text("Primary: $primary")
             Text("Backup: $backup")
-            Button(onClick = { primary = selected.id }, modifier = Modifier.fillMaxWidth()) { Text("SET AS PRIMARY") }
-            Button(onClick = { backup = selected.id }, modifier = Modifier.fillMaxWidth()) { Text("SET AS BACKUP") }
+            Button(onClick = { primary = selected.id; AppSettings.saveRouting(context, primary, backup) }, modifier = Modifier.fillMaxWidth()) { Text("SET AS PRIMARY") }
+            Button(onClick = { backup = selected.id; AppSettings.saveRouting(context, primary, backup) }, modifier = Modifier.fillMaxWidth()) { Text("SET AS BACKUP") }
             ProviderCatalog.all.forEach { p ->
                 Button(onClick = { selected = p; status = if (manager.hasKey(p.id)) "Key stored" else "Not Connected" }, modifier = Modifier.fillMaxWidth()) {
                     Text(p.displayName + " • " + p.category)
