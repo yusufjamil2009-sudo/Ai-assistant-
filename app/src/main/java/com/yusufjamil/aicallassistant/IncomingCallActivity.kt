@@ -13,6 +13,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -27,45 +31,94 @@ class IncomingCallActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                Column(
-                    modifier = Modifier.fillMaxSize().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Text("Incoming call", style = MaterialTheme.typography.headlineSmall)
-                            Text(
-                                CallSession.callerNumber ?: "Unknown caller",
-                                style = MaterialTheme.typography.titleLarge
-                            )
-                            Text(
-                                "If you do not answer manually, the call-control engine will attempt to answer after 20 seconds."
-                            )
-
-                            Button(
-                                onClick = {
-                                    call?.let { if (it.state == Call.STATE_RINGING) it.answer(0) }
-                                    finish()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Answer")
-                            }
-
-                            Button(
-                                onClick = {
-                                    call?.let { if (it.state == Call.STATE_RINGING) it.reject(false, null) }
-                                    finish()
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Decline")
-                            }
+                CallControlScreen(
+                    caller = CallSession.callerNumber ?: "Unknown caller",
+                    status = CallSession.status,
+                    userJoined = CallSession.userJoined,
+                    isMuted = CallSession.isMuted,
+                    onAnswer = {
+                        call?.let { current ->
+                            if (current.state == Call.STATE_RINGING) current.answer(0)
                         }
+                        CallSession.status = "CONNECTED"
+                        finish()
+                    },
+                    onJoin = {
+                        call?.let { current ->
+                            if (current.state == Call.STATE_RINGING) current.answer(0)
+                        }
+                        CallSession.userJoined = true
+                        CallSession.status = "USER JOINED"
+                    },
+                    onListen = {
+                        CallSession.status = "LISTENING"
+                    },
+                    onMute = {
+                        val service = AiCallServiceHolder.service
+                        service?.toggleMute()
+                    },
+                    onEnd = {
+                        AiCallServiceHolder.service?.endCall()
+                        finish()
+                    },
+                    onDecline = {
+                        call?.let { current ->
+                            if (current.state == Call.STATE_RINGING) current.reject(false, null)
+                        }
+                        finish()
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CallControlScreen(
+    caller: String,
+    status: String,
+    userJoined: Boolean,
+    isMuted: Boolean,
+    onAnswer: () -> Unit,
+    onJoin: () -> Unit,
+    onListen: () -> Unit,
+    onMute: () -> Unit,
+    onEnd: () -> Unit,
+    onDecline: () -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("AI Call Assistant", style = MaterialTheme.typography.headlineSmall)
+                Text(caller, style = MaterialTheme.typography.titleLarge)
+                Text("Status: $status")
+
+                if (status == "RINGING") {
+                    Button(onClick = onAnswer, modifier = Modifier.fillMaxWidth()) {
+                        Text("ANSWER")
+                    }
+                    Button(onClick = onDecline, modifier = Modifier.fillMaxWidth()) {
+                        Text("DECLINE")
+                    }
+                } else {
+                    Button(onClick = onJoin, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (userJoined) "JOINED" else "JOIN CALL")
+                    }
+                    Button(onClick = onListen, modifier = Modifier.fillMaxWidth()) {
+                        Text("LISTEN")
+                    }
+                    Button(onClick = onMute, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (isMuted) "UNMUTE" else "MUTE")
+                    }
+                    Button(onClick = onEnd, modifier = Modifier.fillMaxWidth()) {
+                        Text("END CALL")
                     }
                 }
             }
