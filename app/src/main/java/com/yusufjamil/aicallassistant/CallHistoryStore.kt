@@ -25,6 +25,8 @@ class CallHistoryStore(private val context: Context) {
         val next = JSONArray().apply { put(obj); for (i in 0 until minOf(all.length(), 49)) put(all.getJSONObject(i)) }
         prefs.edit().putString("items", next.toString()).apply()
     }
+    fun find(id: Long): CallSummary? = all().firstOrNull { it.id == id }
+
     fun all(): List<CallSummary> {
         val a = JSONArray(prefs.getString("items", "[]")); val out = mutableListOf<CallSummary>()
         for (i in 0 until a.length()) { val o=a.getJSONObject(i); val p=o.optJSONArray("importantPoints") ?: JSONArray()
