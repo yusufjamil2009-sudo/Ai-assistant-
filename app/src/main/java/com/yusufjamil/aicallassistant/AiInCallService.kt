@@ -175,6 +175,7 @@ class AiInCallService : InCallService() {
         CallEndpoint.TYPE_EARPIECE -> "EARPIECE"
         CallEndpoint.TYPE_SPEAKER -> "SPEAKER"
         CallEndpoint.TYPE_STREAMING -> "STREAMING"
+        CallEndpoint.TYPE_WIRED_HEADSET -> "WIRED_HEADSET"
         else -> "UNKNOWN"
     }
 
