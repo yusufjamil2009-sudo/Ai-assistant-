@@ -24,7 +24,7 @@ class AiInCallService:InCallService(){
   timers.remove(call)?.let(h::removeCallbacks)
   if(CallSession.currentCall===call){
    LiveVoiceEngine.stop();val d=((System.currentTimeMillis()-CallSession.startedAt).coerceAtLeast(0))/1000
-   val i=CallIntelligenceEngine.analyze(CallSession.callerNumber,CallSession.callerName,CallSession.savedContact,LiveVoiceEngine.lastTranscript,LiveVoiceEngine.lastResponse)
+   val i=CallIntelligenceEngine.analyzeWithAi(this,CallSession.callerNumber,CallSession.callerName,CallSession.savedContact,LiveVoiceEngine.lastTranscript,LiveVoiceEngine.lastResponse)
    val s=CallSummary(System.currentTimeMillis(),CallSession.callerName,CallSession.callerNumber,CallSession.savedContact,i.purpose,i.category.name,i.callerSaid,i.assistantSaid,i.importantPoints,d,CallSession.startedAt)
    CallHistoryStore(this).save(s);startActivity(Intent(this,CallSummaryActivity::class.java).apply{addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);putExtra(CallSummaryActivity.EXTRA_ID,s.id)});CallSession.reset();ended()
   }
