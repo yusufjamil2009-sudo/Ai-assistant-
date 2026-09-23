@@ -110,9 +110,23 @@ private fun PartTwoSetupScreen(
     ) {
         Text("Part 2 — Incoming Call Engine", style = MaterialTheme.typography.headlineSmall)
         Text(
-            "Native Telecom integration is prepared for real SIM/cellular incoming calls. " +
-                "A ringing call gets a 20-second auto-answer timer. Live AI speech is reserved for Part 4."
+            "Native Telecom incoming-call controls are enabled. A ringing call waits 20 seconds before " +
+                "automatic answer, and JOIN CALL / MUTE / END CALL remain available from the call controls."
         )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("AI voice status", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "The LLM/STT/TTS provider layer is ready, but Android's standard InCallService API " +
+                        "does not expose a generic PCM stream of a normal SIM call to third-party apps. " +
+                        "The app never pretends that microphone capture is remote caller audio."
+                )
+                Text("Voice engine: ${LiveVoiceEngine.state}")
+            }
+        }
 
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(
