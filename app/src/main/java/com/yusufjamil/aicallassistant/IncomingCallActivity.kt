@@ -23,12 +23,8 @@ import androidx.compose.ui.unit.dp
 
 class IncomingCallActivity : ComponentActivity() {
 
-    private var call: Call? = null
-
-    override fun onCreate(savedInstanceState: Bundle?) {
+        override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        call = CallSession.currentCall
-
         setContent {
             MaterialTheme {
                 CallControlScreen(
@@ -37,21 +33,14 @@ class IncomingCallActivity : ComponentActivity() {
                     userJoined = CallSession.userJoined,
                     isMuted = CallSession.isMuted,
                     onAnswer = {
-                        call?.let { current ->
-                            if (current.state == Call.STATE_RINGING) current.answer(0)
-                        }
-                        CallSession.status = "CONNECTED"
+                        AiCallServiceHolder.service?.answerNow()
                         finish()
                     },
                     onJoin = {
-                        call?.let { current ->
-                            if (current.state == Call.STATE_RINGING) current.answer(0)
-                        }
-                        CallSession.userJoined = true
-                        CallSession.status = "USER JOINED"
+                        AiCallServiceHolder.service?.joinCall()
                     },
                     onListen = {
-                        CallSession.status = "LISTENING"
+                        CallActionReceiver.dispatchListen()
                     },
                     onMute = {
                         val service = AiCallServiceHolder.service
@@ -62,9 +51,7 @@ class IncomingCallActivity : ComponentActivity() {
                         finish()
                     },
                     onDecline = {
-                        call?.let { current ->
-                            if (current.state == Call.STATE_RINGING) current.reject(false, null)
-                        }
+                        AiCallServiceHolder.service?.endCall()
                         finish()
                     }
                 )
