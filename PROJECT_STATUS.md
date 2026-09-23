@@ -7,9 +7,9 @@
 3. Background call handling, lock-screen controls and JOIN CALL — IMPLEMENTED IN SOURCE; PHYSICAL TEST PENDING
 4. Live STT -> LLM -> TTS voice pipeline — ORCHESTRATION IMPLEMENTED; CELLULAR AUDIO BRIDGE + PROVIDERS PENDING
 5. API Manager for Brain/STT/TTS providers, secure keys and testing — FOUNDATION IMPLEMENTED; PROVIDER ADAPTERS/UI PENDING
-6. Call intelligence and structured extraction — NOT STARTED
-7. Centered call summary and call history — NOT STARTED
-8. Full integration, device testing, hardening and release — NOT STARTED
+6. Call intelligence and structured extraction — FOUNDATION IMPLEMENTED; LLM EXTRACTION PENDING
+7. Centered call summary and call history — HISTORY FOUNDATION + CALL-END WIRING IMPLEMENTED; SUMMARY UI PENDING
+8. Full integration, device testing, hardening and release — SOURCE INTEGRATION COMPLETED; PHYSICAL DEVICE TESTING PENDING
 
 ## Part 5 delivered
 
@@ -72,3 +72,40 @@ When Part 8 is finished, produce a remaining-work audit that clearly separates:
 - completed but not physically tested
 - blocked by Android/device/carrier limitations
 - still remaining
+
+
+## Part 8 delivered
+
+- Added an in-app API Manager screen with provider selection, API-key paste field, secure Save, key check, and Primary/Backup selection.
+- API keys continue to use Android Keystore-backed storage.
+- Wired call start time and call-end history persistence into the Telecom service.
+- Added call duration capture and stored transcript/assistant-response fields when available.
+
+## Verification audit
+
+### Completed in source
+- Android foundation, permissions and default-dialer request flow.
+- Incoming-call detection and 20-second auto-answer attempt.
+- Background InCallService controls and JOIN CALL path.
+- Voice orchestration boundary with explicit cellular-audio limitation.
+- Provider catalog and encrypted API-key storage.
+- API-key paste UI and Primary/Backup selection UI.
+- Call intelligence foundation.
+- Call history persistence and call-end wiring.
+
+### Completed but not physically tested
+- Real SIM incoming calls and 20-second auto-answer.
+- Lock-screen/screen-off behavior and JOIN CALL takeover.
+- Live provider authentication/network tests.
+- Real transcript-based call summaries.
+
+### Device-dependent / blocked
+- Transparent remote SIM-call audio capture and TTS injection through a generic Android microphone path.
+- Exact call-audio routing varies by Android version, device and carrier/Telecom implementation.
+
+### Still remaining
+- Provider-specific live Connect/Test adapters and STT/LLM/TTS requests.
+- LLM-backed call intelligence extraction.
+- Polished centered summary-card/history UI.
+- Saved-contact name resolution in final summaries.
+- Full physical-device testing, hardening and release validation.
