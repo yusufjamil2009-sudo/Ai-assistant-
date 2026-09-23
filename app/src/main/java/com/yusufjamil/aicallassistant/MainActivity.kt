@@ -1,6 +1,7 @@
 package com.yusufjamil.aicallassistant
 
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -32,9 +33,10 @@ import androidx.core.content.ContextCompat
 class MainActivity : ComponentActivity() {
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-            // Permission state is read by Android when the screen is reopened.
-        }
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {}
+
+    private val dialerRoleLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,62 +44,68 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 Scaffold(
-                    topBar = {
-                        TopAppBar(title = { Text("AI Call Assistant") })
-                    }
+                    topBar = { TopAppBar(title = { Text("AI Call Assistant") }) }
                 ) { padding ->
-                    PartOneSetupScreen(
+                    PartTwoSetupScreen(
                         modifier = Modifier.padding(padding),
-                        onRequestPermissions = ::requestPartOnePermissions
+                        isDefaultDialer = isDefaultDialer(),
+                        onRequestPermissions = ::requestRequiredPermissions,
+                        onRequestDialerRole = ::requestDialerRole
                     )
                 }
             }
         }
     }
 
-    private fun requestPartOnePermissions() {
+    private fun requestRequiredPermissions() {
         val requested = listOf(
             Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.READ_PHONE_NUMBERS,
             Manifest.permission.READ_CONTACTS,
+            Manifest.permission.ANSWER_PHONE_CALLS,
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.POST_NOTIFICATIONS
         )
-
         val missing = requested.filter {
             ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
         }
+        if (missing.isNotEmpty()) permissionLauncher.launch(missing.toTypedArray())
+    }
 
-        if (missing.isNotEmpty()) {
-            permissionLauncher.launch(missing.toTypedArray())
+    private fun isDefaultDialer(): Boolean {
+        val roleManager = getSystemService(RoleManager::class.java) ?: return false
+        return roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
+    }
+
+    private fun requestDialerRole() {
+        val roleManager = getSystemService(RoleManager::class.java) ?: return
+        if (!roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
+            dialerRoleLauncher.launch(
+                roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+            )
         }
     }
 }
 
 @Composable
-private fun PartOneSetupScreen(
+private fun PartTwoSetupScreen(
     modifier: Modifier = Modifier,
-    onRequestPermissions: () -> Unit
+    isDefaultDialer: Boolean,
+    onRequestPermissions: () -> Unit,
+    onRequestDialerRole: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var language by remember { mutableStateOf("English") }
     var voice by remember { mutableStateOf("Female") }
 
     Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+        modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        Text("Part 2 — Incoming Call Engine", style = MaterialTheme.typography.headlineSmall)
         Text(
-            text = "Part 1 — Assistant setup",
-            style = MaterialTheme.typography.headlineSmall
-        )
-
-        Text(
-            text = "This is the native foundation for the AI call-attendant project. " +
-                "Actual call answering and live AI voice handling are deliberately implemented in later parts."
+            "Native Telecom integration is prepared for real SIM/cellular incoming calls. " +
+                "A ringing call gets a 20-second auto-answer timer. Live AI speech is reserved for Part 4."
         )
 
         Card(modifier = Modifier.fillMaxWidth()) {
@@ -106,7 +114,6 @@ private fun PartOneSetupScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text("Assistant profile", style = MaterialTheme.typography.titleMedium)
-
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
@@ -114,7 +121,6 @@ private fun PartOneSetupScreen(
                     label = { Text("Your name") },
                     singleLine = true
                 )
-
                 OutlinedTextField(
                     value = language,
                     onValueChange = { language = it },
@@ -122,7 +128,6 @@ private fun PartOneSetupScreen(
                     label = { Text("Language") },
                     singleLine = true
                 )
-
                 OutlinedTextField(
                     value = voice,
                     onValueChange = { voice = it },
@@ -133,12 +138,21 @@ private fun PartOneSetupScreen(
             }
         }
 
-        Button(
-            onClick = onRequestPermissions,
-            modifier = Modifier.fillMaxWidth()
-        ) {
+        Button(onClick = onRequestPermissions, modifier = Modifier.fillMaxWidth()) {
             Text("Grant Required Permissions")
         }
+
+        Button(onClick = onRequestDialerRole, modifier = Modifier.fillMaxWidth()) {
+            Text(if (isDefaultDialer) "Default Phone App: Enabled" else "Set as Default Phone App")
+        }
+
+        Text(
+            if (isDefaultDialer) {
+                "The app currently holds the Android default dialer role."
+            } else {
+                "Android requires the selected default phone app to provide the full InCallService experience."
+            }
+        )
 
         Text("SMS/message reading is not requested or declared by this project.")
     }
