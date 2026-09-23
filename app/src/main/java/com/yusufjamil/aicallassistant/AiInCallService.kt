@@ -33,6 +33,8 @@ class AiInCallService : InCallService() {
         CallSession.currentCall = call
         CallSession.startedAt = System.currentTimeMillis()
         CallSession.callerNumber = call.details?.handle?.let(::extractNumber)
+        CallSession.callerName = resolveContactName(CallSession.callerNumber)
+        CallSession.savedContact = CallSession.callerName != null
 
         if (call.state == Call.STATE_RINGING) {
             createNotificationChannel()
@@ -52,6 +54,7 @@ class AiInCallService : InCallService() {
             mainHandler.postDelayed(timeout, AUTO_ANSWER_DELAY_MS)
         } else {
             CallSession.status = "CONNECTED"
+            LiveVoiceEngine.startForCurrentCall(this)
             postActiveNotification()
         }
     }
@@ -62,7 +65,10 @@ class AiInCallService : InCallService() {
         if (CallSession.currentCall === call) {
             LiveVoiceEngine.stop()
             val duration = ((System.currentTimeMillis() - CallSession.startedAt).coerceAtLeast(0L)) / 1000L
-            CallHistoryStore(this).save(CallSummary(System.currentTimeMillis(), null, CallSession.callerNumber, false, "Call completed", "OTHER", LiveVoiceEngine.lastTranscript, LiveVoiceEngine.lastResponse, emptyList(), duration, CallSession.startedAt))
+            val intelligence = CallIntelligenceEngine.analyze(CallSession.callerNumber, CallSession.callerName, CallSession.savedContact, LiveVoiceEngine.lastTranscript, LiveVoiceEngine.lastResponse)
+            val summary = CallSummary(System.currentTimeMillis(), CallSession.callerName, CallSession.callerNumber, CallSession.savedContact, intelligence.purpose, intelligence.category.name, intelligence.callerSaid, intelligence.assistantSaid, intelligence.importantPoints, duration, CallSession.startedAt)
+            CallHistoryStore(this).save(summary)
+            launchSummary(summary)
             CallSession.status = "ENDED"
             CallSession.currentCall = null
             CallSession.callerNumber = null
@@ -106,6 +112,14 @@ class AiInCallService : InCallService() {
         postActiveNotification()
     }
 
+    private fun resolveContactName(number: String?): String? {
+        if (number.isNullOrBlank()) return null
+        val uri = android.net.Uri.withAppendedPath(android.provider.ContactsContract.PhoneLookup.CONTENT_FILTER_URI, Uri.encode(number))
+        return contentResolver.query(uri, arrayOf(android.provider.ContactsContract.PhoneLookup.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }
+    private fun launchSummary(summary: CallSummary) {
+        startActivity(Intent(this, CallSummaryActivity::class.java).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP); putExtra(CallSummaryActivity.EXTRA_ID, summary.id) })
+    }
     private fun extractNumber(handle: Uri): String? =
         handle.schemeSpecificPart?.takeIf { it.isNotBlank() }
 
@@ -195,6 +209,8 @@ class AiInCallService : InCallService() {
 object CallSession {
     @Volatile var currentCall: Call? = null
     @Volatile var callerNumber: String? = null
+    @Volatile var callerName: String? = null
+    @Volatile var savedContact: Boolean = false
     @Volatile var autoAnswered: Boolean = false
     @Volatile var userJoined: Boolean = false
     @Volatile var isMuted: Boolean = false
