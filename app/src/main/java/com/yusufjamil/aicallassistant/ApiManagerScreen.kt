@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -15,12 +16,13 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,18 +94,21 @@ fun ApiManagerScreen() {
                     CategoryTab(
                         category = ProviderCategory.BRAIN,
                         label = "BRAIN / LLM",
+                        modifier = Modifier.weight(1f),
                         selected = selectedCategory == ProviderCategory.BRAIN,
                         onSelect = { selectedCategory = ProviderCategory.BRAIN; selectedProviderId = "groq" }
                     )
                     CategoryTab(
                         category = ProviderCategory.STT,
                         label = "STT / SPEECH TO TEXT",
+                        modifier = Modifier.weight(1f),
                         selected = selectedCategory == ProviderCategory.STT,
                         onSelect = { selectedCategory = ProviderCategory.STT; selectedProviderId = "deepgram" }
                     )
                     CategoryTab(
                         category = ProviderCategory.TTS,
                         label = "TTS / TEXT TO SPEECH",
+                        modifier = Modifier.weight(1f),
                         selected = selectedCategory == ProviderCategory.TTS,
                         onSelect = { selectedCategory = ProviderCategory.TTS; selectedProviderId = "elevenlabs" }
                     )
@@ -220,11 +225,12 @@ private fun CategoryTab(
     category: ProviderCategory,
     label: String,
     selected: Boolean,
+    modifier: Modifier = Modifier,
     onSelect: () -> Unit
 ) {
     Button(
         onClick = onSelect,
-        modifier = Modifier.weight(1f)
+        modifier = modifier
     ) {
         Text(label)
     }
@@ -319,9 +325,9 @@ private fun ProviderConfigCard(
                         label = { Text(field.label) },
                         singleLine = true,
                         visualTransformation = if (field.isSecret && !showCredentials) {
-                            android.text.method.PasswordTransformationMethod.getInstance()
+                            PasswordVisualTransformation()
                         } else {
-                            android.text.method.SingleLineTransformationMethod.getInstance()
+                            VisualTransformation.None
                         }
                     )
                 }
