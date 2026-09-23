@@ -11,4 +11,6 @@ object AppSettings {
  fun primary(c:Context)=c.getSharedPreferences(PREFS,0).getString("primary","groq").orEmpty()
  fun backup(c:Context)=c.getSharedPreferences(PREFS,0).getString("backup","gemini").orEmpty()
  fun saveRouting(c:Context,primary:String,backup:String)=c.getSharedPreferences(PREFS,0).edit().putString("primary",primary).putString("backup",backup).apply()
+ fun azureRegion(c:Context)=c.getSharedPreferences(PREFS,0).getString("azure_region","centralindia").orEmpty()
+ fun saveAzureRegion(c:Context,region:String)=c.getSharedPreferences(PREFS,0).edit().putString("azure_region",region.trim()).apply()
 }
