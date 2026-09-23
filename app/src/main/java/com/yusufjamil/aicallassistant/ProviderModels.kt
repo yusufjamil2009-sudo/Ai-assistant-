@@ -72,7 +72,7 @@ object SecureApiKeyStore {
 
     fun deleteAll(context: Context, providerId: String) {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val allKeys = prefs.all.keys.filter { it.startsWith("$providerId_") }
+        val allKeys = prefs.all.keys.filter { it.startsWith("${providerId}_") }
         prefs.edit().apply {
             allKeys.forEach { remove(it) }
         }.apply()
