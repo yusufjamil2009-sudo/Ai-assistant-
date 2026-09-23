@@ -17,6 +17,12 @@ object ProviderAdapters {
  private val map=all.associateBy{it.id}
  fun test(c:Context,id:String)=map[id]?.test(c)?:ApiTestResult(false,"Unknown","Adapter not found")
  fun chat(c:Context,id:String,p:String)=map[id]?.chat(c,p).orEmpty()
+ fun chatWithFallback(c:Context,p:String):String {
+  val primary=AppSettings.primary(c); val backup=AppSettings.backup(c)
+  val order=linkedSetOf(primary,backup).filter{ProviderCatalog.all.firstOrNull{p->p.id==it}?.category==ProviderCategory.BRAIN}
+  for(id in order){ val answer=map[id]?.chat(c,p).orEmpty(); if(answer.isNotBlank()) return answer }
+  return ""
+ }
 }
 
 private fun k(c:Context,id:String)=SecureApiKeyStore.read(c,id)
