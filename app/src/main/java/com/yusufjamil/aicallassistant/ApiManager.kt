@@ -59,30 +59,24 @@ class ApiManager(private val context: Context) {
      * Test a providers connection.
      */
     fun testConnection(providerId: String): ConnectionStatus {
-        val result = ProviderAdapters.test(context, providerId)
+        val result: ApiTestResult = ProviderAdapters.test(context, providerId)
+        val status = result.status.lowercase()
         return when {
-            result.success -> ConnectionStatus.CONNECTED
-            result.status.equals("Invalid", ignoreCase = true) ->
-                ConnectionStatus.INVALID_KEY
-            result.status.contains("Rate Limit", ignoreCase = true) ->
-                ConnectionStatus.RATE_LIMITED
-            result.status.contains("Quota", ignoreCase = true) ->
-                ConnectionStatus.QUOTA_EXCEEDED
-            result.status.contains("Network", ignoreCase = true) ->
-                ConnectionStatus.NETWORK_ERROR
-            result.status.contains("Server", ignoreCase = true) ->
-                ConnectionStatus.SERVER_ERROR
-            result.status.contains("Not Connected", ignoreCase = true) ||
-                result.status.contains("Not Configured", ignoreCase = true) ->
+            result.success || status == "connected" -> ConnectionStatus.CONNECTED
+            status.contains("invalid") || status.contains("unauthorized") ||
+                status.contains("authentication") -> ConnectionStatus.INVALID_KEY
+            status.contains("rate limit") || status.contains("rate_limit") -> ConnectionStatus.RATE_LIMITED
+            status.contains("quota") -> ConnectionStatus.QUOTA_EXCEEDED
+            status.contains("network") || status.contains("timeout") -> ConnectionStatus.NETWORK_ERROR
+            status.contains("server") || status.startsWith("http 5") -> ConnectionStatus.SERVER_ERROR
+            status.contains("not connected") || status.contains("not configured") ->
                 ConnectionStatus.NOT_CONFIGURED
-            result.status.contains("Credentials Required", ignoreCase = true) ->
+            status.contains("credentials required") || status.contains("billing required") ->
                 ConnectionStatus.CONFIGURATION_ERROR
-            result.status.contains("Unsupported", ignoreCase = true) ->
-                ConnectionStatus.UNSUPPORTED
+            status.contains("unsupported") -> ConnectionStatus.UNSUPPORTED
             else -> ConnectionStatus.ERROR
         }
     }
-    
     /**
      * Get the connection status for a provider.
      */
