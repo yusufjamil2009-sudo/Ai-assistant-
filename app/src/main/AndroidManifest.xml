@@ -54,6 +54,7 @@
                 <action android:name="android.telecom.InCallService" />
             </intent-filter>
         </service>
+        <activity android:name=".CallHistoryActivity" android:exported="false" />
         <activity android:name=".CallSummaryActivity" android:exported="false" android:excludeFromRecents="true" />
     </application>
 </manifest>
