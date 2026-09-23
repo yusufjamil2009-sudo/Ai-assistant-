@@ -174,6 +174,7 @@ private fun ApiManagerScreen() {
     var selected by remember { mutableStateOf(ProviderCatalog.all.first()) }
     var key by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("Not Connected") }
+    var azureRegion by remember { mutableStateOf(AppSettings.azureRegion(context)) }
     var primary by remember { mutableStateOf(AppSettings.primary(context)) }
     var backup by remember { mutableStateOf(AppSettings.backup(context)) }
     var testing by remember { mutableStateOf(false) }
@@ -183,10 +184,14 @@ private fun ApiManagerScreen() {
             Text("Secure API keys • Brain / STT / TTS")
             OutlinedTextField(value = selected.displayName, onValueChange = {}, readOnly = true, modifier = Modifier.fillMaxWidth(), label = { Text("Selected provider") })
             OutlinedTextField(value = key, onValueChange = { key = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Paste API key") }, singleLine = true)
-            Button(onClick = { manager.saveKey(selected.id, key); key = ""; status = "Saved securely" }, modifier = Modifier.fillMaxWidth()) { Text("SAVE KEY") }
+            Button(onClick = { if (manager.saveKey(selected.id, key)) { key = ""; status = "Key saved securely" } else status = "Enter an API key first" }, modifier = Modifier.fillMaxWidth()) { Text("SAVE KEY") }
             Button(onClick = { status = manager.keyConfigured(selected.id).message }, modifier = Modifier.fillMaxWidth()) { Text("CHECK KEY") }
             Button(enabled = !testing, onClick = { testing = true; status = "Testing..."; Executors.newSingleThreadExecutor().execute { val result = ProviderApiClient.test(context, selected.id); runOnUiThread { status = result.status + ": " + result.detail; testing = false } } }, modifier = Modifier.fillMaxWidth()) { Text("TEST API") }
             Text("Status: $status")
+            if (selected.id == "azure_speech") {
+                OutlinedTextField(value = azureRegion, onValueChange = { azureRegion = it; AppSettings.saveAzureRegion(context, it) }, modifier = Modifier.fillMaxWidth(), label = { Text("Azure region") }, singleLine = true)
+            }
+            Button(onClick = { manager.deleteKey(selected.id); key = ""; status = "API key removed" }, modifier = Modifier.fillMaxWidth()) { Text("REMOVE KEY") }
             Text("Primary: $primary")
             Text("Backup: $backup")
             Button(onClick = { primary = selected.id; AppSettings.saveRouting(context, primary, backup) }, modifier = Modifier.fillMaxWidth()) { Text("SET AS PRIMARY") }
