@@ -12,6 +12,7 @@ class CallActionReceiver : BroadcastReceiver() {
   }
  }
  companion object {
+  fun dispatchListen(){ CallSession.status="LISTENING"; AiCallServiceHolder.service?.refreshCallNotification() }
   const val ACTION_ANSWER="com.yusufjamil.aicallassistant.ANSWER"
   const val ACTION_JOIN="com.yusufjamil.aicallassistant.JOIN"
   const val ACTION_END="com.yusufjamil.aicallassistant.END"
