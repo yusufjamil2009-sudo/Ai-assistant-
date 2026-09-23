@@ -31,6 +31,7 @@ class AiInCallService : InCallService() {
         super.onCallAdded(call)
 
         CallSession.currentCall = call
+        CallSession.startedAt = System.currentTimeMillis()
         CallSession.callerNumber = call.details?.handle?.let(::extractNumber)
 
         if (call.state == Call.STATE_RINGING) {
@@ -60,6 +61,8 @@ class AiInCallService : InCallService() {
 
         if (CallSession.currentCall === call) {
             LiveVoiceEngine.stop()
+            val duration = ((System.currentTimeMillis() - CallSession.startedAt).coerceAtLeast(0L)) / 1000L
+            CallHistoryStore(this).save(CallSummary(System.currentTimeMillis(), null, CallSession.callerNumber, false, "Call completed", "OTHER", LiveVoiceEngine.lastTranscript, LiveVoiceEngine.lastResponse, emptyList(), duration, CallSession.startedAt))
             CallSession.status = "ENDED"
             CallSession.currentCall = null
             CallSession.callerNumber = null
@@ -196,4 +199,5 @@ object CallSession {
     @Volatile var userJoined: Boolean = false
     @Volatile var isMuted: Boolean = false
     @Volatile var status: String = "IDLE"
+    @Volatile var startedAt: Long = 0L
 }
