@@ -11,13 +11,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -312,7 +307,6 @@ private fun ProviderConfigCard(
             // Credential Fields
             credentialFields.forEach { field ->
                 val value = credentialValues[field.name] ?: ""
-                val displayValue = if (showCredentials && !field.isSecret) value else if (value.isNotBlank()) maskApiKey(value) else ""
                 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -340,13 +334,9 @@ private fun ProviderConfigCard(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                IconButton(onClick = onToggleShow) {
-                    Icon(
-                        if (showCredentials) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                        contentDescription = if (showCredentials) "Hide credentials" else "Show credentials"
-                    )
+                Button(onClick = onToggleShow) {
+                    Text(if (showCredentials) "HIDE" else "SHOW")
                 }
-                Text(if (showCredentials) "HIDE" else "SHOW")
             }
             
             Spacer(Modifier.height(16.dp))
