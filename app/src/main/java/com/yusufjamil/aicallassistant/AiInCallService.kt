@@ -19,37 +19,75 @@ class AiInCallService : InCallService() {
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)
-        if (call.state != Call.STATE_RINGING) return
 
         CallSession.currentCall = call
         CallSession.callerNumber = call.details?.handle?.let(::extractNumber)
 
-        createNotificationChannel()
-        postIncomingNotification()
+        if (call.state == Call.STATE_RINGING) {
+            createNotificationChannel()
+            postIncomingNotification()
 
-        val timeout = Runnable {
-            if (call.state == Call.STATE_RINGING) {
-                call.answer(0)
-                CallSession.autoAnswered = true
-                postAnsweredNotification()
+            val timeout = Runnable {
+                if (call.state == Call.STATE_RINGING) {
+                    call.answer(0)
+                    CallSession.autoAnswered = true
+                    CallSession.status = "AI HANDLING"
+                    postActiveNotification()
+                }
             }
-        }
 
-        sessions[call] = timeout
-        mainHandler.postDelayed(timeout, AUTO_ANSWER_DELAY_MS)
+            sessions[call] = timeout
+            mainHandler.postDelayed(timeout, AUTO_ANSWER_DELAY_MS)
+        } else {
+            CallSession.status = "CONNECTED"
+            postActiveNotification()
+        }
     }
 
     override fun onCallRemoved(call: Call) {
         sessions.remove(call)?.let(mainHandler::removeCallbacks)
 
         if (CallSession.currentCall === call) {
+            CallSession.status = "ENDED"
             CallSession.currentCall = null
             CallSession.callerNumber = null
             CallSession.autoAnswered = false
-            cancelNotification()
+            CallSession.userJoined = false
+            postEndedNotification()
         }
 
         super.onCallRemoved(call)
+    }
+
+    fun answerNow() {
+        val call = CallSession.currentCall ?: return
+        sessions.remove(call)?.let(mainHandler::removeCallbacks)
+        if (call.state == Call.STATE_RINGING) {
+            call.answer(0)
+            CallSession.status = "CONNECTED"
+            postActiveNotification()
+        }
+    }
+
+    fun joinCall() {
+        val call = CallSession.currentCall ?: return
+        if (call.state == Call.STATE_RINGING) {
+            sessions.remove(call)?.let(mainHandler::removeCallbacks)
+            call.answer(0)
+        }
+        CallSession.userJoined = true
+        CallSession.status = "USER JOINED"
+        postActiveNotification()
+    }
+
+    fun endCall() {
+        CallSession.currentCall?.disconnect()
+    }
+
+    fun toggleMute() {
+        setMuted(!CallSession.isMuted)
+        CallSession.isMuted = !CallSession.isMuted
+        postActiveNotification()
     }
 
     private fun extractNumber(handle: Uri): String? =
@@ -60,9 +98,7 @@ class AiInCallService : InCallService() {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
         val pendingIntent = PendingIntent.getActivity(
-            this,
-            100,
-            intent,
+            this, 100, intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -80,36 +116,62 @@ class AiInCallService : InCallService() {
         NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
     }
 
-    private fun postAnsweredNotification() {
+    private fun postActiveNotification() {
+        val intent = Intent(this, IncomingCallActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+        val pendingIntent = PendingIntent.getActivity(
+            this, 100, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val text = when {
+            CallSession.status == "AI HANDLING" -> "AI handling call • JOIN CALL available"
+            CallSession.userJoined -> "You joined the call • END CALL available"
+            else -> "Call active • JOIN CALL available"
+        }
+
         val notification = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.sym_action_call)
             .setContentTitle("AI Call Assistant")
-            .setContentText("Call answered automatically. Live AI voice is added in Part 4.")
+            .setContentText(text)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setOngoing(true)
+            .setContentIntent(pendingIntent)
             .build()
 
         NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
     }
 
-    private fun cancelNotification() {
-        NotificationManagerCompat.from(this).cancel(NOTIFICATION_ID)
+    private fun postEndedNotification() {
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.sym_action_call)
+            .setContentTitle("Call ended")
+            .setContentText("Call session closed.")
+            .setCategory(NotificationCompat.CATEGORY_CALL)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setAutoCancel(true)
+            .build()
+
+        NotificationManagerCompat.from(this).notify(NOTIFICATION_ID, notification)
     }
 
     private fun createNotificationChannel() {
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(
                 CHANNEL_ID,
-                "Incoming calls",
+                "Call Assistant",
                 NotificationManager.IMPORTANCE_HIGH
-            )
+            ).apply {
+                description = "Incoming and active call controls"
+            }
         )
     }
 
     companion object {
         const val AUTO_ANSWER_DELAY_MS = 20_000L
-        private const val CHANNEL_ID = "incoming_calls"
+        private const val CHANNEL_ID = "call_assistant"
         private const val NOTIFICATION_ID = 2001
     }
 }
@@ -118,4 +180,7 @@ object CallSession {
     @Volatile var currentCall: Call? = null
     @Volatile var callerNumber: String? = null
     @Volatile var autoAnswered: Boolean = false
+    @Volatile var userJoined: Boolean = false
+    @Volatile var isMuted: Boolean = false
+    @Volatile var status: String = "IDLE"
 }
