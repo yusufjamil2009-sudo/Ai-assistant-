@@ -69,7 +69,7 @@ object CallAudioTransportProvider {
     
     fun get(): CallAudioTransport = transport
     
-    fun isAvailable(): Boolean = transport.isSupported(CallSession.currentCall?.context ?: return false)
+    fun isAvailable(): Boolean = false
     
     fun readCallerAudio(): ByteArray? = transport.readCallerAudio()
     
